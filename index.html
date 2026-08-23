@@ -1391,7 +1391,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <button class="btn secondary" id="excelExport">📊 Excel Export</button>
 <label class="btn secondary">📥 Excel Import<input id="excelImport" type="file" accept=".xls,.xml,text/xml,application/xml" hidden></label>
 <label class="btn secondary">⬆ Restore<input id="restore" type="file" accept=".json" hidden></label>
-<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span></div>
+<button class="btn secondary" id="vmgRecoverBtn" title="Restore an automatic on-device backup, saved right before any Google Drive sync that would have replaced your data">🛟 Recover</button>
+<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span><span id="drivePwaHint" style="display:none;font-size:11px;color:#b45309;margin-left:2px;white-space:normal">If nothing happens, open this app's web address in a normal browser tab once to connect — it stays connected here afterward too.</span></div>
 </div>
 <div id="content"></div>
 </main>
@@ -1481,6 +1482,18 @@ let d=(()=>{try{
 let page="dashboard";
 const titles={dashboard:"Dashboard",master:"Master",planning:"Planning",income:"Income",investments:"Investments",expenses:"Expenses",loans:"Loans",tax:"Tax",position:"Financial Position",reports:"Reports",guide:"Operating Guide"};
 function save(){localStorage.setItem(KEY,JSON.stringify(d));msg("Data saved in this browser.");if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();}
+/* Whenever a whole-data swap happens (Restore, Excel Import, or any future
+   bulk-load), route it through here instead of assigning `d` directly.
+   This stamps a fresh sync timestamp on the newly loaded data BEFORE it can
+   be compared against Google Drive, so freshly restored/imported data is
+   always treated as the newest version and is pushed to Drive — never
+   silently overwritten by an older copy that happened to be sitting there. */
+function vmgAdoptData(newData){
+  d=newData;
+  d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||"").slice(0,60)};
+  localStorage.setItem(KEY,JSON.stringify(d));
+  if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();
+}
 function msg(t){let x=document.getElementById("msg");if(!x){x=document.createElement("div");x.id="msg";x.style="position:fixed;right:16px;bottom:16px;background:#111827;color:white;padding:10px 13px;border-radius:7px;font-size:13px;z-index:20";document.body.appendChild(x)}x.textContent=t;clearTimeout(window.mt);window.mt=setTimeout(()=>x.remove(),2000)}
 function fmt(n){return new Intl.NumberFormat("en-IN",{maximumFractionDigits:0}).format(Number(n)||0)}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
@@ -11700,7 +11713,7 @@ function phase525RestoreBackup(file){
       const sourceInfo=raw&&raw.backupFormat==="VMG-PFM-BACKUP"?`\nBackup created: ${raw.createdAt||"unknown"}\nBackup version: ${raw.backupVersion||"unknown"}`:"\nLegacy/raw VMG JSON backup detected.";
       const summary=`Restore this VMG backup?\n\nFinancial Years: ${fyCount}\nMembers: ${memberCount}\nInvestment Plans: ${stats.investmentPlans||0}\nExpense Plans: ${stats.expensePlans||0}${sourceInfo}\n\nYour current working data will be replaced.`;
       if(!confirm(summary))return;
-      d=structuredClone(candidate);
+      vmgAdoptData(structuredClone(candidate));
       phase629EnsureLifeLong();
       localStorage.setItem(KEY,JSON.stringify(d));
       const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";
@@ -11781,7 +11794,7 @@ function phase630ImportExcel(file){
     const candidate=JSON.parse(jsonChunks);
     if(!candidate||!Array.isArray(candidate.financialYears)||!Array.isArray(candidate.members))throw new Error('Invalid VMG data in workbook.');
     if(!confirm('Import this VMG Excel file? Current working data will be replaced by the data in VMG_JSON.'))return;
-    d=candidate;localStorage.setItem(KEY,JSON.stringify(d));const fy=document.getElementById('fy');if(fy)fy.value=d.selectedFY||'';render();msg('Excel import completed successfully.');
+    vmgAdoptData(candidate);const fy=document.getElementById('fy');if(fy)fy.value=d.selectedFY||'';render();msg('Excel import completed successfully.');
   }catch(e){alert('Excel import failed: '+e.message);}}; r.onerror=()=>alert('Unable to read the Excel file.'); r.readAsText(file);
 }
 
@@ -12001,6 +12014,7 @@ function phase630ExportExcelVisual(){
 }
 
 if(document.getElementById("excelExport"))document.getElementById("excelExport").onclick=phase630ExportExcelVisual;
+if(document.getElementById("vmgRecoverBtn"))document.getElementById("vmgRecoverBtn").onclick=()=>{if(typeof vmgShowAutoBackupPicker==="function")vmgShowAutoBackupPicker();else alert("Recovery isn't available yet.");};
 if(document.getElementById("excelImport"))document.getElementById("excelImport").onchange=e=>{const f=e.target.files[0];phase630ImportExcel(f);e.target.value=""};
 document.getElementById("menubtn").onclick=()=>document.getElementById("side").classList.toggle("open");
 document.querySelectorAll(".menu button").forEach(function(btn){
@@ -13340,7 +13354,10 @@ function vmgDriveEnsureToken(interactive){
     vmgDriveInitTokenClient();
     if(!vmgDriveTokenClient){reject(new Error("Google sign-in is still loading — try again in a moment."));return;}
     if(vmgDriveToken&&Date.now()<vmgDriveTokenExp){resolve(vmgDriveToken);return;}
+    const hint=document.getElementById("drivePwaHint");
+    const hintTimer=interactive?setTimeout(()=>{if(hint)hint.style.display="inline";},4000):null;
     vmgDriveTokenClient.callback=(resp)=>{
+      clearTimeout(hintTimer);
       if(resp&&resp.access_token){
         vmgDriveToken=resp.access_token;
         vmgDriveTokenExp=Date.now()+((resp.expires_in||3600)*1000)-60000;
@@ -13419,6 +13436,83 @@ function vmgDriveScheduleSync(){
   clearTimeout(vmgDriveTimer);
   vmgDriveTimer=setTimeout(vmgDriveUpload,4000);
 }
+
+/* ---------- Local safety net ----------
+   Before this device's data is EVER replaced by something pulled from
+   Google Drive, the current on-device data is snapshotted here first —
+   silently, no action needed. Keeps the last few snapshots so a bad
+   sync decision (or a misclicked dialog) is always recoverable without
+   needing a manually-saved backup file. */
+const VMG_AUTOBACKUP_PREFIX="VMG_AUTOBACKUP_";
+const VMG_AUTOBACKUP_MAX=6;
+function vmgAutoBackupCurrent(reason){
+  try{
+    if(!d||!Array.isArray(d.financialYears)||d.financialYears.length===0)return;
+    localStorage.setItem(VMG_AUTOBACKUP_PREFIX+Date.now(),JSON.stringify({savedAt:new Date().toISOString(),reason:reason||"",data:d}));
+    const keys=Object.keys(localStorage).filter(k=>k.startsWith(VMG_AUTOBACKUP_PREFIX)).sort();
+    while(keys.length>VMG_AUTOBACKUP_MAX)localStorage.removeItem(keys.shift());
+  }catch(e){console.error("Auto-backup failed:",e);}
+}
+function vmgListAutoBackups(){
+  return Object.keys(localStorage).filter(k=>k.startsWith(VMG_AUTOBACKUP_PREFIX)).sort().reverse().map(k=>{
+    try{const v=JSON.parse(localStorage.getItem(k));return{key:k,savedAt:v.savedAt,reason:v.reason,fy:(v.data.financialYears||[]).length,mem:(v.data.members||[]).length};}
+    catch(e){return null;}
+  }).filter(Boolean);
+}
+function vmgRecoverAutoBackup(key){
+  try{
+    const v=JSON.parse(localStorage.getItem(key));
+    if(!v||!v.data){alert("That auto-backup could not be read.");return;}
+    if(!confirm("Restore this auto-backup from "+new Date(v.savedAt).toLocaleString()+" ("+(v.data.financialYears||[]).length+" financial year(s))?\n\nThis will replace your current data on this device."))return;
+    vmgAdoptData(v.data);
+    const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";
+    render();
+    msg("Auto-backup restored.");
+  }catch(e){alert("Recovery failed: "+e.message);}
+}
+function vmgShowAutoBackupPicker(){
+  const list=vmgListAutoBackups();
+  if(!list.length){alert("No auto-backups are stored on this device yet. Auto-backups are created automatically right before Google Drive ever replaces your local data.");return;}
+  const lines=list.map((b,i)=>(i+1)+") "+new Date(b.savedAt).toLocaleString()+" — "+b.fy+" FY(s), "+b.mem+" member(s)"+(b.reason?" — "+b.reason:"")).join("\n");
+  const choice=prompt("Auto-backups saved on this device (most recent first).\nType a number to restore it, or Cancel to close.\n\n"+lines);
+  if(!choice)return;
+  const idx=parseInt(choice,10)-1;
+  if(isNaN(idx)||idx<0||idx>=list.length){alert("Invalid choice — nothing was changed.");return;}
+  vmgRecoverAutoBackup(list[idx].key);
+}
+
+/* ---------- Clear, honest conflict screen ----------
+   Replaces the old native confirm() dialog (too easy to click through
+   without reading) with an explicit side-by-side choice. Resolves to
+   "local" (keep this device, push to Drive) or "remote" (load Drive's
+   copy) — never happens silently once local data exists. */
+function vmgShowSyncConflictModal(remote,localTime,remoteTime){
+  return new Promise((resolve)=>{
+    const localStats={fy:(d.financialYears||[]).length,mem:(d.members||[]).length};
+    const remoteStats={fy:(remote.financialYears||[]).length,mem:(remote.members||[]).length};
+    const overlay=document.createElement("div");
+    overlay.style.cssText="position:fixed;inset:0;background:rgba(10,14,25,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px";
+    overlay.innerHTML='<div class="card" style="max-width:540px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4)">'
+      +'<h2>⚠️ Two versions of your data were found</h2>'
+      +'<p style="color:var(--muted,#6b7488);font-size:13.5px;line-height:1.5">This device and Google Drive have different data. Pick which one to keep — the one you don\'t pick will be permanently replaced (though it will still be recoverable from an auto-backup on this device).</p>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0">'
+      +'<div style="border:1px solid var(--line,#e2e5ec);border-radius:8px;padding:10px"><b>This device</b><br><small style="color:var(--muted,#6b7488)">'+esc(localTime?new Date(localTime).toLocaleString():"No sync timestamp")+'</small><br>'+localStats.fy+' financial year(s)<br>'+localStats.mem+' member(s)</div>'
+      +'<div style="border:1px solid var(--line,#e2e5ec);border-radius:8px;padding:10px"><b>Google Drive</b><br><small style="color:var(--muted,#6b7488)">'+esc(new Date(remoteTime).toLocaleString())+'</small><br>'+remoteStats.fy+' financial year(s)<br>'+remoteStats.mem+' member(s)</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;gap:8px">'
+      +'<button class="btn primary" id="vmgKeepLocalBtn" style="width:100%;padding:12px;font-size:14px">✅ Keep the data on THIS device (recommended)</button>'
+      +'<button class="btn secondary" id="vmgUseRemoteBtn" style="width:100%;padding:9px;color:#b91c1c">Replace it with the Google Drive version instead</button>'
+      +'</div></div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector("#vmgKeepLocalBtn").onclick=()=>{document.body.removeChild(overlay);resolve("local");};
+    overlay.querySelector("#vmgUseRemoteBtn").onclick=()=>{
+      if(confirm("Are you sure? This will replace the data on THIS device with the Google Drive version.\n\n(An auto-backup of what's currently on this device will be saved first, just in case.)")){
+        document.body.removeChild(overlay);resolve("remote");
+      }
+    };
+  });
+}
+
 async function vmgDriveInitialSync(){
   try{
     const st=document.getElementById("driveStatus");if(st)st.textContent="Checking Drive…";
@@ -13431,11 +13525,14 @@ async function vmgDriveInitialSync(){
         d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
         msg("Loaded your data from Google Drive.");
       }else if(remoteTime>localTime+2000){
-        if(confirm("A newer version of your data was found on Google Drive (last synced "+new Date(remoteTime).toLocaleString()+").\n\nLoad it now? This replaces the data currently shown on this device.\n\nChoose Cancel to keep what's on this device and overwrite Drive with it instead.")){
+        const choice=await vmgShowSyncConflictModal(remote,localTime,remoteTime);
+        if(choice==="remote"){
+          vmgAutoBackupCurrent("Replaced by Google Drive version on "+new Date().toLocaleString());
           d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
-          msg("Loaded latest data from Google Drive.");
+          msg("Loaded the Google Drive version. Your previous data was auto-backed-up on this device.");
         }else{
           await vmgDriveUpload();
+          msg("Kept this device's data and pushed it to Google Drive.");
         }
       }else{
         await vmgDriveUpload();
