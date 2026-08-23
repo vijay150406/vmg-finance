@@ -13,8 +13,7 @@
   const CFG=window.VMG_GOOGLE_DRIVE_CONFIG||{};
   let tokenClient=null, accessToken=null;
   function deviceId(){let x=localStorage.getItem(DEVICE_KEY);if(!x){x='vmg-'+crypto.randomUUID();localStorage.setItem(DEVICE_KEY,x)}return x}
-  function configured(){return !!(CFG.clientId && CFG.clientId.includes('.apps.googleusercontent.com') && !CFG.clientId.startsWith('PASTE_'))}
-  function googleReady(){return !!(window.google?.accounts?.oauth2)}
+  function configured(){return !!(CFG.clientId && CFG.clientId.includes('.apps.googleusercontent.com') && !CFG.clientId.startsWith('PASTE_') && window.google?.accounts?.oauth2)}
   function open(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'id'});if(!db.objectStoreNames.contains(QUEUE))db.createObjectStore(QUEUE,{keyPath:'id',autoIncrement:true});if(!db.objectStoreNames.contains(META))db.createObjectStore(META,{keyPath:'key'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
   function tx(store,mode,fn){return open().then(db=>new Promise((res,rej)=>{const t=db.transaction(store,mode),s=t.objectStore(store);let out;try{out=fn(s)}catch(e){rej(e);return}t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error)}))}
   function get(store,key){return tx(store,'readonly',s=>new Promise((res,rej)=>{const r=s.get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}
@@ -31,7 +30,6 @@
   async function exportLocal(){const x=await getLocal();return x?x.data:null}
   function ensureTokenClient(){
     if(!configured())throw new Error('Google Drive is not configured. Add your Google Web Client ID in google-drive-config.js.');
-    if(!googleReady())throw new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.');
     if(!tokenClient){
       tokenClient=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:()=>{}});
     }
@@ -40,11 +38,9 @@
   function authorize(userGesture=true){
     return new Promise((resolve,reject)=>{
       if(!configured())return reject(new Error('Google Drive is not configured.'));
-      if(!googleReady())return reject(new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.'));
       const c=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:(r)=>{if(r.error){reject(new Error(r.error_description||r.error));return}accessToken=r.access_token;resolve(r)}});
       tokenClient=c;
-      /* Fresh app launch: try silent re-authorization first. Manual Connect uses consent. */
-      c.requestAccessToken({prompt:userGesture?'consent':'none'});
+      c.requestAccessToken({prompt:accessToken?'':'consent'});
     });
   }
   async function api(path,opts={}){
@@ -138,27 +134,3 @@
   function status(){return {online:navigator.onLine,configured:configured(),authorized:!!accessToken,deviceId:deviceId(),lastSync:localStorage.getItem(LAST_SYNC_KEY)||'',fileId:localStorage.getItem(CLOUD_FILE_KEY)||''}}
   window.VMGSync={deviceId,saveLocal,getLocal,exportLocal,sync,status,authorize,disconnect,configured,baselineId:BASELINE_ID};
 })();
-/* VMG AUTO-CONNECT V1 — on app launch, silently restore the Google session when possible. */
-(function(){
-  function waitForGoogle(attempt){
-    attempt=attempt||0;
-    if(!window.VMGSync)return;
-    const st=VMGSync.status();
-    if(!st.online||!st.configured||st.authorized)return;
-    if(window.google?.accounts?.oauth2){
-      VMGSync.authorize(false)
-        .then(()=>VMGSync.sync())
-        .then(r=>{
-          if(window.__VMG_SYNC_STATUS_REFRESH__)window.__VMG_SYNC_STATUS_REFRESH__();
-          if(r&&r.conflict)console.warn('VMG Google Drive conflict:',r.error);
-          else if(r&&!r.ok)console.warn('VMG Google Drive auto-sync:',r.error||r.reason);
-        })
-        .catch(e=>console.info('VMG silent Google reconnect unavailable; manual Connect remains available.',e.message||e));
-      return;
-    }
-    if(attempt<30)setTimeout(()=>waitForGoogle(attempt+1),500);
-  }
-  window.addEventListener('load',()=>setTimeout(()=>waitForGoogle(0),300));
-  setTimeout(()=>waitForGoogle(0),1000);
-})();
-
