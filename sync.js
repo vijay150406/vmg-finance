@@ -11,7 +11,7 @@
   const BASELINE_ID='VMG-MASTER-BASELINE-V1';
   const FILE_NAME='VMG_PFM_MASTER_SYNC.json';
   const CFG=window.VMG_GOOGLE_DRIVE_CONFIG||{};
-  let tokenClient=null, accessToken=null, autoSyncBusy=false;
+  let tokenClient=null, accessToken=null;
   function deviceId(){let x=localStorage.getItem(DEVICE_KEY);if(!x){x='vmg-'+crypto.randomUUID();localStorage.setItem(DEVICE_KEY,x)}return x}
   function configured(){return !!(CFG.clientId && CFG.clientId.includes('.apps.googleusercontent.com') && !CFG.clientId.startsWith('PASTE_'))}
   function googleReady(){return !!(window.google?.accounts?.oauth2)}
@@ -41,56 +41,11 @@
     return new Promise((resolve,reject)=>{
       if(!configured())return reject(new Error('Google Drive is not configured.'));
       if(!googleReady())return reject(new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.'));
-      const silent=!userGesture;
-      const c=google.accounts.oauth2.initTokenClient({
-        client_id:CFG.clientId,
-        scope:CFG.scope,
-        callback:(r)=>{
-          if(r.error){reject(new Error(r.error_description||r.error));return}
-          accessToken=r.access_token;
-          resolve(r);
-        },
-        error_callback:(e)=>reject(new Error(e?.type||'Google authorization was not completed.'))
-      });
+      const c=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:(r)=>{if(r.error){reject(new Error(r.error_description||r.error));return}accessToken=r.access_token;resolve(r)}});
       tokenClient=c;
-      // Startup uses a silent request. Manual Connect keeps the normal consent UX.
-      c.requestAccessToken({prompt:silent?'none':(accessToken?'':'consent')});
+      /* Fresh app launch: try silent re-authorization first. Manual Connect uses consent. */
+      c.requestAccessToken({prompt:userGesture?'consent':'none'});
     });
-  }
-  async function waitForGoogleReady(timeoutMs=15000){
-    const started=Date.now();
-    while(!googleReady() && Date.now()-started<timeoutMs){
-      await new Promise(r=>setTimeout(r,100));
-    }
-    return googleReady();
-  }
-  function publishStatus(){
-    try{window.dispatchEvent(new CustomEvent('vmg:sync-status',{detail:status()}))}catch(e){}
-    const dot=document.getElementById('vmgSyncDot'),text=document.getElementById('vmgSyncText');
-    if(!dot||!text)return;
-    const st=status();
-    if(!st.online){dot.style.background='#d97706';text.textContent='Offline — saved locally';}
-    else if(!st.configured){dot.style.background='#6b7280';text.textContent='Google Drive — setup required';}
-    else if(!st.authorized){dot.style.background='#2563eb';text.textContent='Connect Google Drive';}
-    else{text.textContent=st.lastSync?'Google Drive — synced '+new Date(st.lastSync).toLocaleTimeString():'Google Drive — connected';dot.style.background='#15803d';}
-  }
-  async function autoConnectAndSync(){
-    if(autoSyncBusy || !navigator.onLine || !configured() || accessToken)return;
-    autoSyncBusy=true;
-    publishStatus();
-    try{
-      if(!await waitForGoogleReady())return;
-      await authorize(false);
-      publishStatus();
-      const result=await sync();
-      if(result?.ok)publishStatus();
-    }catch(e){
-      // Silent startup authorization must never interrupt the VMG application.
-      console.info('VMG automatic Google Drive sync skipped:',e.message||String(e));
-    }finally{
-      autoSyncBusy=false;
-      publishStatus();
-    }
   }
   async function api(path,opts={}){
     if(!accessToken)throw new Error('Google Drive authorization required. Click Connect Google Drive.');
@@ -181,12 +136,29 @@
   async function clearQueue(){const q=await all(QUEUE);for(const x of q)await tx(QUEUE,'readwrite',s=>s.delete(x.id))}
   function disconnect(){accessToken=null}
   function status(){return {online:navigator.onLine,configured:configured(),authorized:!!accessToken,deviceId:deviceId(),lastSync:localStorage.getItem(LAST_SYNC_KEY)||'',fileId:localStorage.getItem(CLOUD_FILE_KEY)||''}}
-  window.VMGSync={deviceId,saveLocal,getLocal,exportLocal,sync,status,authorize,disconnect,configured,baselineId:BASELINE_ID,autoConnectAndSync};
-
-  // Automatic reconnect/sync on every application start. If Google cannot
-  // silently authorize, VMG simply remains fully usable offline and the
-  // existing manual Connect Google Drive button remains available.
-  window.addEventListener('online',()=>{autoConnectAndSync().catch(()=>{})});
-  window.addEventListener('load',()=>{setTimeout(()=>autoConnectAndSync().catch(()=>{}),800)});
-  setTimeout(()=>autoConnectAndSync().catch(()=>{}),1500);
+  window.VMGSync={deviceId,saveLocal,getLocal,exportLocal,sync,status,authorize,disconnect,configured,baselineId:BASELINE_ID};
 })();
+/* VMG AUTO-CONNECT V1 — on app launch, silently restore the Google session when possible. */
+(function(){
+  function waitForGoogle(attempt){
+    attempt=attempt||0;
+    if(!window.VMGSync)return;
+    const st=VMGSync.status();
+    if(!st.online||!st.configured()||st.authorized)return;
+    if(window.google?.accounts?.oauth2){
+      VMGSync.authorize(false)
+        .then(()=>VMGSync.sync())
+        .then(r=>{
+          if(window.__VMG_SYNC_STATUS_REFRESH__)window.__VMG_SYNC_STATUS_REFRESH__();
+          if(r&&r.conflict)console.warn('VMG Google Drive conflict:',r.error);
+          else if(r&&!r.ok)console.warn('VMG Google Drive auto-sync:',r.error||r.reason);
+        })
+        .catch(e=>console.info('VMG silent Google reconnect unavailable; manual Connect remains available.',e.message||e));
+      return;
+    }
+    if(attempt<30)setTimeout(()=>waitForGoogle(attempt+1),500);
+  }
+  window.addEventListener('load',()=>setTimeout(()=>waitForGoogle(0),300));
+  setTimeout(()=>waitForGoogle(0),1000);
+})();
+
