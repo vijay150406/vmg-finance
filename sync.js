@@ -144,7 +144,7 @@
     attempt=attempt||0;
     if(!window.VMGSync)return;
     const st=VMGSync.status();
-    if(!st.online||!st.configured()||st.authorized)return;
+    if(!st.online||!st.configured||st.authorized)return;
     if(window.google?.accounts?.oauth2){
       VMGSync.authorize(false)
         .then(()=>VMGSync.sync())
