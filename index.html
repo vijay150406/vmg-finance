@@ -1365,6 +1365,85 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VMG Finance">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<style id="vmg-mobile-usability">
+/* ============================================================
+   MOBILE USABILITY LAYER (loaded last — wins cascade ties)
+   Cosmetic/layout only: bigger touch targets, a scrollable
+   action bar instead of a wall of wrapping buttons, and
+   "frozen" label columns so you can tell which row you're on
+   while scrolling sideways through month columns. No data,
+   calculations, or existing desktop layout are touched — all
+   of this is scoped to narrow screens except the sticky-column
+   rules, which are harmless (inert) on wide screens with no
+   horizontal overflow.
+   ============================================================ */
+
+/* ---------- Sticky label column(s) — all screen sizes ----------
+   Keeps the row label visible while scrolling right through
+   months. Falls back to doing nothing if the table doesn't
+   overflow, so this is safe everywhere, not just mobile. */
+table td:first-child,table th:first-child{
+  position:sticky;left:0;z-index:2;
+  background:var(--card,#fff);
+}
+table thead th:first-child{background:#f4f6fa!important;z-index:3}
+table tbody tr:nth-child(even) td:first-child{background:#fbfbfd}
+table tbody tr:hover td:first-child{background:#eef4ff!important}
+table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa!important}
+
+/* Planning grids: freeze the WHOLE label section (Member + Type +
+   Description, etc.), using each grid's own fixed column widths,
+   so scrolling through May–Apr never loses context of which
+   investment/expense row you're looking at. */
+.horizontalPlan.plan-investment td:nth-child(2),.horizontalPlan.plan-investment th:nth-child(2){position:sticky;left:100px;z-index:2;background:inherit}
+.horizontalPlan.plan-investment td:nth-child(3),.horizontalPlan.plan-investment th:nth-child(3){position:sticky;left:230px;z-index:2;background:inherit;box-shadow:2px 0 4px rgba(16,24,40,.08)}
+.horizontalPlan.plan-expense td:nth-child(2),.horizontalPlan.plan-expense th:nth-child(2){position:sticky;left:130px;z-index:2;background:inherit;box-shadow:2px 0 4px rgba(16,24,40,.08)}
+.horizontalPlan.plan-investment td:first-child,.horizontalPlan.plan-expense td:first-child,.horizontalPlan.plan-balance td:first-child,
+.horizontalPlan.plan-investment th:first-child,.horizontalPlan.plan-expense th:first-child,.horizontalPlan.plan-balance th:first-child{background:var(--card,#fff)}
+
+/* ---------- Everything below: narrow screens only ---------- */
+@media(max-width:800px){
+  /* Bigger, easier-to-tap controls throughout */
+  .btn,label.btn{min-height:40px;padding:10px 14px!important;font-size:13.5px!important;display:inline-flex;align-items:center;justify-content:center}
+  input,select,textarea{min-height:38px;font-size:14px!important}
+  .menu button{min-height:46px;font-size:14.5px}
+  #menubtn{min-height:40px;min-width:44px;font-size:18px}
+
+  /* Top action bar: one horizontally-scrollable row instead of a
+     wall of wrapping buttons that pushes content down and makes
+     the page feel cluttered. */
+  .topright{
+    flex-wrap:nowrap!important;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    padding:4px 2px 8px;
+    margin:0 -4px;
+    scroll-snap-type:x proximity;
+  }
+  .topright>*{flex:0 0 auto;scroll-snap-align:start}
+  .topright .btn,.topright label.btn{white-space:nowrap}
+  #driveStatus,#drivePwaHint{white-space:normal!important;flex:1 1 100%!important;order:99}
+
+  /* Cards: compact but still breathable */
+  .card{padding:12px!important}
+  .card h2{font-size:15px!important;margin-bottom:10px!important}
+  .card h3{font-size:13.5px!important}
+
+  /* Tables: smaller font so more fits before scrolling kicks in,
+     smooth momentum scroll on iOS, and a touch-friendly cell size */
+  table{font-size:12px}
+  table th,table td{padding:8px 7px!important}
+  div{-webkit-overflow-scrolling:touch}
+
+  /* Dashboard/stat tiles: single column, full width, easy to read */
+  .grid{grid-template-columns:1fr!important;gap:8px!important}
+  .stat,.p700-stat{padding:12px!important}
+
+  /* Selected-FY control shouldn't fight the title for space */
+  .top{gap:8px!important}
+  .topright select{min-height:38px}
+}
+</style>
 </head>
 <body>
 <div class="side" id="side">
@@ -13364,7 +13443,7 @@ function vmgDriveEnsureToken(interactive){
         vmgDriveUpdateUi();resolve(vmgDriveToken);
       }else reject(new Error("Google sign-in did not complete."));
     };
-    vmgDriveTokenClient.requestAccessToken({prompt:interactive?"consent":"none"});
+    vmgDriveTokenClient.requestAccessToken({prompt:interactive?"consent":""});
   });
 }
 async function vmgDriveApi(url,options){
@@ -13558,19 +13637,6 @@ function vmgDriveButtonClick(){
     if(btn)btn.onclick=vmgDriveButtonClick;
     vmgDriveUpdateUi();
     vmgDriveInitTokenClient();
-
-    // Auto-sync on startup: try only silent authorization.
-    // If Google requires interaction, leave the manual Connect button available.
-    if(vmgDriveConfigured() && navigator.onLine){
-      setTimeout(()=>{
-        vmgDriveEnsureToken(false)
-          .then(()=>vmgDriveInitialSync())
-          .catch(e=>{
-            console.info("VMG Drive silent startup sync not available:",e.message);
-            vmgDriveUpdateUi();
-          });
-      },1200);
-    }
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",wire);
   else wire();
