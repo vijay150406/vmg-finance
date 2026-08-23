@@ -31,7 +31,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 7px;b
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e5e7eb;font-size:11px}.active{background:#dcfce7;color:#166534}.future{background:#dbeafe;color:#1e40af}.empty{text-align:center;color:var(--muted);padding:25px}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:15px}.stat small{color:var(--muted)}.stat b{display:block;font-size:24px;margin-top:7px}
 .hidden{display:none!important}.mobile{display:none}
-@media(max-width:800px){.side{transform:translateX(-100%);transition:.2s;z-index:5}.side.open{transform:translateX(0)}.main{margin-left:0;padding:13px}.mobile{display:inline-block}.grid{grid-template-columns:1fr}}
+@media(max-width:1024px){.side{transform:translateX(-100%);transition:.2s;z-index:5}.side.open{transform:translateX(0)}.main{margin-left:0;padding:13px}.mobile{display:inline-block}.grid{grid-template-columns:1fr}}
 
 <style>
 .horizontalPlan th,.horizontalPlan td{white-space:nowrap;text-align:right;vertical-align:middle}
@@ -137,7 +137,7 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .btn{font-size:12px;padding:7px 10px;border-radius:5px}.subtabbar{background:#fff;border:1px solid #e0e5ec;border-radius:8px;padding:7px 9px!important;margin-bottom:10px!important;box-shadow:0 1px 2px rgba(16,24,40,.03)}
 .subtabbar>div{gap:5px!important}.subtabbar b{font-size:12px;color:#344054}.subtabbar .btn{padding:5px 9px;font-size:12px}
 .mf-member-tabs button,.npsMemberTabs button{font-size:12px;padding:5px 10px}.notice{display:none!important}
-@media(max-width:800px){.main{padding:12px}}
+@media(max-width:1024px){.main{padding:12px}}
 </style>
 <style id="phase582-epf-professional">
 .epfMemberTabs{display:flex;gap:6px;margin:0 0 12px;padding:7px 9px;background:#fff;border:1px solid #e0e5ec;border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
@@ -1036,7 +1036,7 @@ table:not(.horizontalPlan) tbody tr:last-child td{
 }
 
 /* ---------- Responsive polish ---------- */
-@media(max-width:800px){
+@media(max-width:1024px){
   .main{
     padding:14px!important;
   }
@@ -1401,8 +1401,17 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 .horizontalPlan.plan-investment td:first-child,.horizontalPlan.plan-expense td:first-child,.horizontalPlan.plan-balance td:first-child,
 .horizontalPlan.plan-investment th:first-child,.horizontalPlan.plan-expense th:first-child,.horizontalPlan.plan-balance th:first-child{background:var(--card,#fff)}
 
-/* ---------- Everything below: narrow screens only ---------- */
-@media(max-width:800px){
+/* ---------- Everything below: narrow screens only (covers phones in
+   both portrait and landscape, plus tablets in portrait) ---------- */
+@media(max-width:1024px){
+  /* An older cosmetic patch elsewhere in this file sets a fixed
+     .main{margin-left:225px} with no screen-size condition, which
+     otherwise wins (by load order) over the mobile rule that's
+     supposed to remove that margin once the sidebar is hidden —
+     leaving a blank gap on the left. Force it here, in the layer
+     that loads last, so the content actually reclaims that space. */
+  .main{margin-left:0!important}
+
   /* Bigger, easier-to-tap controls throughout */
   .btn,label.btn{min-height:40px;padding:10px 14px!important;font-size:13.5px!important;display:inline-flex;align-items:center;justify-content:center}
   input,select,textarea{min-height:38px;font-size:14px!important}
