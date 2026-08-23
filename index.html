@@ -13364,7 +13364,7 @@ function vmgDriveEnsureToken(interactive){
         vmgDriveUpdateUi();resolve(vmgDriveToken);
       }else reject(new Error("Google sign-in did not complete."));
     };
-    vmgDriveTokenClient.requestAccessToken({prompt:interactive?"consent":""});
+    vmgDriveTokenClient.requestAccessToken({prompt:interactive?"consent":"none"});
   });
 }
 async function vmgDriveApi(url,options){
@@ -13558,6 +13558,19 @@ function vmgDriveButtonClick(){
     if(btn)btn.onclick=vmgDriveButtonClick;
     vmgDriveUpdateUi();
     vmgDriveInitTokenClient();
+
+    // Auto-sync on startup: try only silent authorization.
+    // If Google requires interaction, leave the manual Connect button available.
+    if(vmgDriveConfigured() && navigator.onLine){
+      setTimeout(()=>{
+        vmgDriveEnsureToken(false)
+          .then(()=>vmgDriveInitialSync())
+          .catch(e=>{
+            console.info("VMG Drive silent startup sync not available:",e.message);
+            vmgDriveUpdateUi();
+          });
+      },1200);
+    }
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",wire);
   else wire();
