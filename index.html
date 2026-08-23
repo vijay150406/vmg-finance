@@ -1453,6 +1453,33 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   .topright select{min-height:38px}
 }
 </style>
+
+<style id="vmg-left-panel-autohide-v2">
+/* LEFT PANEL AUTO-HIDE — COSMETIC/LAYOUT ONLY.
+   Existing menu button/event logic is preserved. */
+.side{
+  transform:translateX(-100%)!important;
+  transition:transform .22s ease!important;
+  z-index:1000!important;
+}
+.side.open{
+  transform:translateX(0)!important;
+}
+.main{
+  margin-left:0!important;
+  width:100%!important;
+}
+#menubtn.mobile{
+  display:inline-block!important;
+  cursor:pointer!important;
+}
+@media(max-width:1024px){
+  .side{transform:translateX(-100%)!important}
+  .side.open{transform:translateX(0)!important}
+  .main{margin-left:0!important;width:100%!important}
+}
+</style>
+
 </head>
 <body>
 <div class="side" id="side">
@@ -13651,4 +13678,12 @@ function vmgDriveButtonClick(){
   else wire();
 })();
 </script>
+
+<script id="vmg-left-panel-autohide-init-v2">
+document.addEventListener('DOMContentLoaded',function(){
+  const side=document.getElementById('side');
+  if(side) side.classList.remove('open');
+});
+</script>
+
 </body></html>
