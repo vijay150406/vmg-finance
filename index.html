@@ -15434,12 +15434,13 @@ function vmgDriveUpdateUi(){
   if(!vmgDriveConfigured()){
     btn.textContent="🔗 Drive Sync (not set up)";st.textContent="See SYNC-SETUP.md";btn.title="Set DRIVE_CLIENT_ID in this file to enable Google Drive sync — see SYNC-SETUP.md";return;
   }
+  const fileTag=vmgDriveFileId?" [file …"+vmgDriveFileId.slice(-6)+"]":"";
   if(vmgDriveToken){
     btn.textContent="🔄 Sync Now";
-    if(!navigator.onLine)st.textContent="Offline — will sync when back online";
-    else if(vmgDriveBusy)st.textContent="Syncing…";
-    else if(vmgDriveLastSync)st.textContent="Synced "+vmgDriveTimeAgo(vmgDriveLastSync);
-    else st.textContent="Connected";
+    if(!navigator.onLine)st.textContent="Offline — will sync when back online"+fileTag;
+    else if(vmgDriveBusy)st.textContent="Syncing…"+fileTag;
+    else if(vmgDriveLastSync)st.textContent="Synced "+vmgDriveTimeAgo(vmgDriveLastSync)+fileTag;
+    else st.textContent="Connected"+fileTag;
   }else{
     btn.textContent="🔗 Connect Google Drive";st.textContent="Not connected";
   }
