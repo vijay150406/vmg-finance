@@ -15454,12 +15454,21 @@ function vmgDriveInitTokenClient(){
     callback:()=>{} // per-request callback is set in vmgDriveEnsureToken
   });
 }
-function vmgDriveEnsureToken(interactive){
+async function vmgDriveEnsureToken(interactive){
+  if(!vmgDriveConfigured())throw new Error("Google Drive sync isn't set up yet — see SYNC-SETUP.md.");
+  // IMPORTANT: Google Identity Services is loaded on demand.
+  // Always wait for GIS before creating the token client; otherwise the
+  // mobile/PWA can race the script load and report "sign-in is still loading".
+  try{
+    if(window.VMG_ensureGoogleGIS) await window.VMG_ensureGoogleGIS();
+    else if(window.VMG_loadGoogleGIS) await window.VMG_loadGoogleGIS();
+  }catch(e){
+    throw new Error("Google sign-in could not load. Please check your internet connection and try again.");
+  }
+  vmgDriveInitTokenClient();
+  if(!vmgDriveTokenClient)throw new Error("Google sign-in is still loading — try again in a moment.");
+  if(vmgDriveToken&&Date.now()<vmgDriveTokenExp)return vmgDriveToken;
   return new Promise((resolve,reject)=>{
-    if(!vmgDriveConfigured()){reject(new Error("Google Drive sync isn't set up yet — see SYNC-SETUP.md."));return;}
-    vmgDriveInitTokenClient();
-    if(!vmgDriveTokenClient){reject(new Error("Google sign-in is still loading — try again in a moment."));return;}
-    if(vmgDriveToken&&Date.now()<vmgDriveTokenExp){resolve(vmgDriveToken);return;}
     const hint=document.getElementById("drivePwaHint");
     const hintTimer=interactive?setTimeout(()=>{if(hint)hint.style.display="inline";},4000):null;
     vmgDriveTokenClient.callback=(resp)=>{
@@ -15659,11 +15668,19 @@ function vmgDriveButtonClick(){
   else{vmgDriveEnsureToken(true).then(vmgDriveInitialSync).catch(e=>{console.error(e);alert(e.message);});}
 }
 (function vmgDriveBoot(){
-  function wire(){
+  async function wire(){
     const btn=document.getElementById("driveSync");
     if(btn)btn.onclick=vmgDriveButtonClick;
     vmgDriveUpdateUi();
-    vmgDriveInitTokenClient();
+    try{
+      if(window.VMG_ensureGoogleGIS) await window.VMG_ensureGoogleGIS();
+      else if(window.VMG_loadGoogleGIS) await window.VMG_loadGoogleGIS();
+      vmgDriveInitTokenClient();
+    }catch(e){
+      console.warn("VMG Google GIS startup load deferred:",e);
+      // The Connect Google Drive button will retry the GIS load on demand.
+    }
+    vmgDriveUpdateUi();
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",wire);
   else wire();
