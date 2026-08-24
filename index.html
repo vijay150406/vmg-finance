@@ -15599,10 +15599,11 @@ function vmgShowAutoBackupPicker(){
 }
 
 /* ---------- Clear, honest conflict screen ----------
-   Replaces the old native confirm() dialog (too easy to click through
-   without reading) with an explicit side-by-side choice. Resolves to
-   "local" (keep this device, push to Drive) or "remote" (load Drive's
-   copy) — never happens silently once local data exists. */
+   Shown whenever Google Drive's copy is newer than this device's copy
+   by any amount. Resolves to "local" (keep this older device copy,
+   push it to Drive anyway) or "remote" (load Drive's newer copy) —
+   the newer Drive copy is the recommended default, never a silent
+   overwrite. */
 function vmgShowSyncConflictModal(remote,localTime,remoteTime){
   return new Promise((resolve)=>{
     const localStats={fy:(d.financialYears||[]).length,mem:(d.members||[]).length};
@@ -15617,8 +15618,8 @@ function vmgShowSyncConflictModal(remote,localTime,remoteTime){
       +'<div style="border:1px solid var(--line,#e2e5ec);border-radius:8px;padding:10px"><b>Google Drive</b><br><small style="color:var(--muted,#6b7488)">'+esc(new Date(remoteTime).toLocaleString())+'</small><br>'+remoteStats.fy+' financial year(s)<br>'+remoteStats.mem+' member(s)</div>'
       +'</div>'
       +'<div style="display:flex;flex-direction:column;gap:8px">'
-      +'<button class="btn primary" id="vmgKeepLocalBtn" style="width:100%;padding:12px;font-size:14px">✅ Keep the data on THIS device (recommended)</button>'
-      +'<button class="btn secondary" id="vmgUseRemoteBtn" style="width:100%;padding:9px;color:#b91c1c">Replace it with the Google Drive version instead</button>'
+      +'<button class="btn primary" id="vmgUseRemoteBtn" style="width:100%;padding:12px;font-size:14px">✅ Use the Google Drive version (newer, recommended)</button>'
+      +'<button class="btn secondary" id="vmgKeepLocalBtn" style="width:100%;padding:9px;color:#b91c1c">Keep this device\'s older data instead</button>'
       +'</div></div>';
     document.body.appendChild(overlay);
     overlay.querySelector("#vmgKeepLocalBtn").onclick=()=>{document.body.removeChild(overlay);resolve("local");};
@@ -15641,7 +15642,11 @@ async function vmgDriveInitialSync(){
       if(!localHasData){
         d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
         msg("Loaded your data from Google Drive.");
-      }else if(remoteTime>localTime+2000){
+      }else if(remoteTime>localTime){
+        /* Drive is newer by ANY amount — always ask, never guess. The old
+           +2000ms grace window let a genuinely newer Drive copy (e.g. an
+           edit made seconds ago on another device) get silently overwritten
+           by this device's older data below. That silent path is gone. */
         const choice=await vmgShowSyncConflictModal(remote,localTime,remoteTime);
         if(choice==="remote"){
           vmgAutoBackupCurrent("Replaced by Google Drive version on "+new Date().toLocaleString());
@@ -15651,9 +15656,11 @@ async function vmgDriveInitialSync(){
           await vmgDriveUpload();
           msg("Kept this device's data and pushed it to Google Drive.");
         }
-      }else{
+      }else if(remoteTime<localTime){
+        /* This device is genuinely newer — safe to push without asking. */
         await vmgDriveUpload();
       }
+      /* remoteTime===localTime: already in sync, nothing to do. */
     }else{
       await vmgDriveUpload();
     }
