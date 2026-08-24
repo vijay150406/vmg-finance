@@ -161,8 +161,39 @@
       const currentCloudVersion=Number(cloud.version||0);
       const q=await all(QUEUE);
       if(knownVersion && currentCloudVersion!==knownVersion){
+        /*
+         * V22: resolve the common sequential-edit case.
+         * If this device has a queued local save that occurred AFTER the
+         * cloud file was last modified, the local edit is the newer edit and
+         * must be uploaded.  Previously this branch always raised a conflict,
+         * which blocked Mobile -> PC after a PC -> Mobile update.
+         *
+         * If the cloud copy is newer than this device's queued local edit,
+         * pull the cloud copy instead.  If timestamps are effectively tied,
+         * retain the existing conflict protection.
+         */
         const remote=await readCloud(cloud.id);
-        const e=new Error('VMG cloud data changed on another device. Review before replacing it.');e.code='VMG_CONFLICT';e.remote=remote;e.cloud=cloud;throw e;
+        const newestQueue=q.length
+          ? q.reduce((m,x)=>Math.max(m,Date.parse(x.createdAt)||0),0)
+          : 0;
+        const cloudTime=Date.parse(cloud.modifiedTime||'')||0;
+
+        if(newestQueue>cloudTime+1000){
+          cloud=await updateCloud(cloud,local.data);
+          await put(STORE,{...local,cloudVersion:Number(cloud.version||0),cloudModifiedTime:cloud.modifiedTime||'',cloudFileId:cloud.id});
+          await clearQueue();
+        }else if(cloudTime>newestQueue+1000){
+          await put(STORE,{id:'current',baselineId:BASELINE_ID,
+            deviceId:cloud.appProperties?.deviceId||deviceId(),
+            updatedAt:cloud.modifiedTime,version:Number(remote?.version||local.version||0),
+            data:remote,cloudVersion:currentCloudVersion,
+            cloudModifiedTime:cloud.modifiedTime,cloudFileId:cloud.id});
+          await clearQueue();
+          if(window.__VMG_APPLY_REMOTE__)await window.__VMG_APPLY_REMOTE__(remote);
+        }else{
+          const e=new Error('VMG cloud data changed on another device. Review before replacing it.');
+          e.code='VMG_CONFLICT';e.remote=remote;e.cloud=cloud;throw e;
+        }
       }
       /* A newly opened second device has only the automatic initial-migration
          queue entry. In that case the existing cloud copy is authoritative and
@@ -230,7 +261,7 @@
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(bootAuto,250)});
 })();
 
-/* VMG V21 — authoritative VMG data bridge
+/* VMG V22 — authoritative VMG data bridge + sequential bidirectional conflict resolution
    The main VMG application stores its authoritative data in localStorage.
    This bridge connects that store to the persistent Supabase-backed sync
    engine above without changing any financial logic. */
