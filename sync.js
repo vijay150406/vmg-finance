@@ -11,10 +11,21 @@
   const BASELINE_ID='VMG-MASTER-BASELINE-V1';
   const FILE_NAME='VMG_PFM_MASTER_SYNC.json';
   const CFG=window.VMG_GOOGLE_DRIVE_CONFIG||{};
-  let tokenClient=null, accessToken=null;
+  const EDGE_URL=CFG.edgeFunctionUrl||'https://mnspbfeqbhotmqvyiqff.supabase.co/functions/v1/vmg-google-drive';
+  const DEVICE_SECRET_KEY='VMG_DEVICE_SECRET_V3';
+  let accessToken=null;
   function deviceId(){let x=localStorage.getItem(DEVICE_KEY);if(!x){x='vmg-'+crypto.randomUUID();localStorage.setItem(DEVICE_KEY,x)}return x}
-  function configured(){return !!(CFG.clientId && CFG.clientId.includes('.apps.googleusercontent.com') && !CFG.clientId.startsWith('PASTE_'))}
-  function googleReady(){return !!(window.google?.accounts?.oauth2)}
+  function deviceSecret(){
+    let x=localStorage.getItem(DEVICE_SECRET_KEY);
+    if(!x){
+      const b=new Uint8Array(32);crypto.getRandomValues(b);
+      let s='';for(const v of b)s+=String.fromCharCode(v);
+      x=btoa(s).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+      localStorage.setItem(DEVICE_SECRET_KEY,x);
+    }
+    return x;
+  }
+  function configured(){return !!EDGE_URL}
   function open(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'id'});if(!db.objectStoreNames.contains(QUEUE))db.createObjectStore(QUEUE,{keyPath:'id',autoIncrement:true});if(!db.objectStoreNames.contains(META))db.createObjectStore(META,{keyPath:'key'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
   function tx(store,mode,fn){return open().then(db=>new Promise((res,rej)=>{const t=db.transaction(store,mode),s=t.objectStore(store);let out;try{out=fn(s)}catch(e){rej(e);return}t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error)}))}
   function get(store,key){return tx(store,'readonly',s=>new Promise((res,rej)=>{const r=s.get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}
@@ -29,36 +40,70 @@
   }
   async function getLocal(){return await get(STORE,'current')}
   async function exportLocal(){const x=await getLocal();return x?x.data:null}
-  function ensureTokenClient(){
-    if(!configured())throw new Error('Google Drive is not configured. Add your Google Web Client ID in google-drive-config.js.');
-    if(!googleReady())throw new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.');
-    if(!tokenClient){
-      tokenClient=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:()=>{}});
-    }
-    return tokenClient;
+
+  async function edgeRequest(action,extra={}){
+    const r=await fetch(EDGE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      action,deviceId:deviceId(),deviceSecret:deviceSecret(),...extra
+    })});
+    let j={};try{j=await r.json()}catch{}
+    if(!r.ok)throw new Error(j.error||('VMG authorization service failed ('+r.status+').'));
+    return j;
   }
-  function authorize(userGesture=true){
+
+  async function getPersistentToken(){
+    const j=await edgeRequest('token');
+    if(!j.accessToken)throw new Error('Google Drive token was not returned.');
+    accessToken=j.accessToken;
+    return true;
+  }
+
+  async function authorize(userGesture=true){
+    if(!configured())throw new Error('Google Drive service is not configured.');
+    if(!userGesture){
+      try{return await getPersistentToken();}
+      catch(e){return false;}
+    }
+
+    const j=await edgeRequest('authorize',{returnUrl:location.href});
+    if(!j.authorizationUrl)throw new Error('Google authorization URL was not returned.');
+
     return new Promise((resolve,reject)=>{
-      if(!configured())return reject(new Error('Google Drive is not configured.'));
-      if(!googleReady())return reject(new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.'));
-      const c=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:(r)=>{if(r.error){reject(new Error(r.error_description||r.error));return}accessToken=r.access_token;resolve(r)}});
-      tokenClient=c;
-      /* Manual Connect uses consent; startup uses a silent request. */
-      c.requestAccessToken({prompt:userGesture?'consent':'none'});
+      let settled=false;
+      const timer=setTimeout(()=>{if(!settled){settled=true;window.removeEventListener('message',onMessage);reject(new Error('Google authorization timed out.'));}},5*60*1000);
+      function onMessage(ev){
+        if(ev.origin!==location.origin)return;
+        const d=ev.data||{};
+        if(d.type!=='VMG_GOOGLE_AUTH')return;
+        settled=true;clearTimeout(timer);window.removeEventListener('message',onMessage);
+        if(!d.ok){reject(new Error(d.error||'Google authorization failed.'));return;}
+        getPersistentToken().then(()=>resolve({accessToken})).catch(reject);
+      }
+      window.addEventListener('message',onMessage);
+      const w=window.open(j.authorizationUrl,'vmgGoogleAuth','width=520,height=700,resizable=yes,scrollbars=yes');
+      if(!w){
+        window.removeEventListener('message',onMessage);clearTimeout(timer);
+        reject(new Error('Google sign-in popup was blocked. Please allow pop-ups for VMG and try again.'));
+      }
     });
   }
+
   async function autoAuthorize(){
-    if(!configured()||!googleReady()||!navigator.onLine||accessToken)return false;
-    try{await authorize(false);return !!accessToken;}catch(e){
-      console.info('VMG silent Google reconnect unavailable:',e.message||e);
+    if(!configured()||!navigator.onLine||accessToken)return false;
+    try{return await authorize(false);}catch(e){
+      console.info('VMG persistent Google reconnect unavailable:',e.message||e);
       return false;
     }
   }
+
   async function api(path,opts={}){
     if(!accessToken)throw new Error('Google Drive authorization required. Click Connect Google Drive.');
     const h=new Headers(opts.headers||{});h.set('Authorization','Bearer '+accessToken);if(opts.body && !h.has('Content-Type'))h.set('Content-Type','application/json');
     const r=await fetch('https://www.googleapis.com/drive/v3/'+path,{...opts,headers:h});
-    if(r.status===401){accessToken=null;throw new Error('Google authorization expired. Click Connect Google Drive again.');}
+    if(r.status===401){
+      accessToken=null;
+      try{await getPersistentToken();return await api(path,opts);}
+      catch(e){throw new Error('Google Drive authorization expired. Please connect Google Drive again.');}
+    }
     if(!r.ok){let msg='Google Drive request failed ('+r.status+')';try{const j=await r.json();msg=j.error?.message||msg}catch{}throw new Error(msg)}
     return r.status===204?null:r.json();
   }
@@ -141,7 +186,10 @@
     }catch(e){return {ok:false,conflict:e.code==='VMG_CONFLICT',error:e.message||String(e),remote:e.remote}}
   }
   async function clearQueue(){const q=await all(QUEUE);for(const x of q)await tx(QUEUE,'readwrite',s=>s.delete(x.id))}
-  function disconnect(){accessToken=null}
+  async function disconnect(){
+    accessToken=null;
+    try{await edgeRequest('disconnect')}catch(e){console.warn('VMG disconnect:',e)}
+  }
   function status(){return {online:navigator.onLine,configured:configured(),authorized:!!accessToken,deviceId:deviceId(),lastSync:localStorage.getItem(LAST_SYNC_KEY)||'',fileId:localStorage.getItem(CLOUD_FILE_KEY)||''}}
   window.VMGSync={deviceId,saveLocal,getLocal,exportLocal,sync,status,authorize,autoAuthorize,disconnect,configured,baselineId:BASELINE_ID};
 })();
