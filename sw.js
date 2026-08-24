@@ -4,7 +4,7 @@
    through to the network (never cached) since they carry live sync
    data and auth tokens. Bump CACHE_NAME whenever you redeploy the
    app so returning devices pick up the new version. */
-const CACHE_NAME = 'vmg-pfm-v18';
+const CACHE_NAME = 'vmg-pfm-v19';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
