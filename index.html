@@ -15673,7 +15673,10 @@ async function vmgDriveInitialSync(){
 }
 function vmgDriveButtonClick(){
   if(!vmgDriveConfigured()){alert("Google Drive sync isn't set up in this file yet.\n\nSee SYNC-SETUP.md for the one-time setup (create a free Google OAuth Client ID and paste it into DRIVE_CLIENT_ID near the bottom of this file).");return;}
-  if(vmgDriveToken){vmgDriveUpload();}
+  /* Always check Drive for a newer copy first, even when already connected.
+     Blindly pushing here (the old behavior) could overwrite a newer edit
+     made on another device that this tab hasn't seen yet. */
+  if(vmgDriveToken){vmgDriveInitialSync();}
   else{vmgDriveEnsureToken(true).then(vmgDriveInitialSync).catch(e=>{console.error(e);alert(e.message);});}
 }
 (function vmgDriveBoot(){
@@ -15723,6 +15726,21 @@ window.addEventListener("pageshow",async function(){
     console.info("VMG foreground Drive sync deferred.",e);
   }
 });
+
+/* Periodically re-check Drive while the tab stays open in the foreground.
+   Without this, a tab left open (never reloaded, never backgrounded/
+   restored) would never learn about an edit made on another device —
+   pageshow alone only fires on actual navigation/bfcache restore. */
+setInterval(async function(){
+  if(document.hidden || vmgDriveBusy)return;
+  if(localStorage.getItem(DRIVE_CONNECTED_KEY)!=="1" || !navigator.onLine)return;
+  try{
+    await vmgDriveEnsureToken(false);
+    await vmgDriveInitialSync();
+  }catch(e){
+    console.info("VMG periodic Drive check deferred.",e);
+  }
+},30000);
 </script>
 
 <script id="vmg-left-panel-autohide-init-v2">
