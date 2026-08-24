@@ -11,21 +11,10 @@
   const BASELINE_ID='VMG-MASTER-BASELINE-V1';
   const FILE_NAME='VMG_PFM_MASTER_SYNC.json';
   const CFG=window.VMG_GOOGLE_DRIVE_CONFIG||{};
-  const EDGE_URL=CFG.edgeFunctionUrl||'https://mnspbfeqbhotmqvyiqff.supabase.co/functions/v1/vmg-google-drive';
-  const DEVICE_SECRET_KEY='VMG_DEVICE_SECRET_V3';
-  let accessToken=null;
+  let tokenClient=null, accessToken=null;
   function deviceId(){let x=localStorage.getItem(DEVICE_KEY);if(!x){x='vmg-'+crypto.randomUUID();localStorage.setItem(DEVICE_KEY,x)}return x}
-  function deviceSecret(){
-    let x=localStorage.getItem(DEVICE_SECRET_KEY);
-    if(!x){
-      const b=new Uint8Array(32);crypto.getRandomValues(b);
-      let s='';for(const v of b)s+=String.fromCharCode(v);
-      x=btoa(s).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
-      localStorage.setItem(DEVICE_SECRET_KEY,x);
-    }
-    return x;
-  }
-  function configured(){return !!EDGE_URL}
+  function configured(){return !!(CFG.clientId && CFG.clientId.includes('.apps.googleusercontent.com') && !CFG.clientId.startsWith('PASTE_'))}
+  function googleReady(){return !!(window.google?.accounts?.oauth2)}
   function open(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VERSION);r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(STORE))db.createObjectStore(STORE,{keyPath:'id'});if(!db.objectStoreNames.contains(QUEUE))db.createObjectStore(QUEUE,{keyPath:'id',autoIncrement:true});if(!db.objectStoreNames.contains(META))db.createObjectStore(META,{keyPath:'key'})};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
   function tx(store,mode,fn){return open().then(db=>new Promise((res,rej)=>{const t=db.transaction(store,mode),s=t.objectStore(store);let out;try{out=fn(s)}catch(e){rej(e);return}t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error)}))}
   function get(store,key){return tx(store,'readonly',s=>new Promise((res,rej)=>{const r=s.get(key);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}))}
@@ -40,70 +29,36 @@
   }
   async function getLocal(){return await get(STORE,'current')}
   async function exportLocal(){const x=await getLocal();return x?x.data:null}
-
-  async function edgeRequest(action,extra={}){
-    const r=await fetch(EDGE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      action,deviceId:deviceId(),deviceSecret:deviceSecret(),...extra
-    })});
-    let j={};try{j=await r.json()}catch{}
-    if(!r.ok)throw new Error(j.error||('VMG authorization service failed ('+r.status+').'));
-    return j;
-  }
-
-  async function getPersistentToken(){
-    const j=await edgeRequest('token');
-    if(!j.accessToken)throw new Error('Google Drive token was not returned.');
-    accessToken=j.accessToken;
-    return true;
-  }
-
-  async function authorize(userGesture=true){
-    if(!configured())throw new Error('Google Drive service is not configured.');
-    if(!userGesture){
-      try{return await getPersistentToken();}
-      catch(e){return false;}
+  function ensureTokenClient(){
+    if(!configured())throw new Error('Google Drive is not configured. Add your Google Web Client ID in google-drive-config.js.');
+    if(!googleReady())throw new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.');
+    if(!tokenClient){
+      tokenClient=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:()=>{}});
     }
-
-    const j=await edgeRequest('authorize',{returnUrl:location.href});
-    if(!j.authorizationUrl)throw new Error('Google authorization URL was not returned.');
-
+    return tokenClient;
+  }
+  function authorize(userGesture=true){
     return new Promise((resolve,reject)=>{
-      let settled=false;
-      const timer=setTimeout(()=>{if(!settled){settled=true;window.removeEventListener('message',onMessage);reject(new Error('Google authorization timed out.'));}},5*60*1000);
-      function onMessage(ev){
-        if(ev.origin!==location.origin)return;
-        const d=ev.data||{};
-        if(d.type!=='VMG_GOOGLE_AUTH')return;
-        settled=true;clearTimeout(timer);window.removeEventListener('message',onMessage);
-        if(!d.ok){reject(new Error(d.error||'Google authorization failed.'));return;}
-        getPersistentToken().then(()=>resolve({accessToken})).catch(reject);
-      }
-      window.addEventListener('message',onMessage);
-      const w=window.open(j.authorizationUrl,'vmgGoogleAuth','width=520,height=700,resizable=yes,scrollbars=yes');
-      if(!w){
-        window.removeEventListener('message',onMessage);clearTimeout(timer);
-        reject(new Error('Google sign-in popup was blocked. Please allow pop-ups for VMG and try again.'));
-      }
+      if(!configured())return reject(new Error('Google Drive is not configured.'));
+      if(!googleReady())return reject(new Error('Google Identity Services is still loading. Please wait a moment and try Connect Google Drive again.'));
+      const c=google.accounts.oauth2.initTokenClient({client_id:CFG.clientId,scope:CFG.scope,callback:(r)=>{if(r.error){reject(new Error(r.error_description||r.error));return}accessToken=r.access_token;resolve(r)}});
+      tokenClient=c;
+      /* Manual Connect uses consent; startup uses a silent request. */
+      c.requestAccessToken({prompt:userGesture?'consent':'none'});
     });
   }
-
   async function autoAuthorize(){
-    if(!configured()||!navigator.onLine||accessToken)return false;
-    try{return await authorize(false);}catch(e){
-      console.info('VMG persistent Google reconnect unavailable:',e.message||e);
+    if(!configured()||!googleReady()||!navigator.onLine||accessToken)return false;
+    try{await authorize(false);return !!accessToken;}catch(e){
+      console.info('VMG silent Google reconnect unavailable:',e.message||e);
       return false;
     }
   }
-
   async function api(path,opts={}){
     if(!accessToken)throw new Error('Google Drive authorization required. Click Connect Google Drive.');
     const h=new Headers(opts.headers||{});h.set('Authorization','Bearer '+accessToken);if(opts.body && !h.has('Content-Type'))h.set('Content-Type','application/json');
     const r=await fetch('https://www.googleapis.com/drive/v3/'+path,{...opts,headers:h});
-    if(r.status===401){
-      accessToken=null;
-      try{await getPersistentToken();return await api(path,opts);}
-      catch(e){throw new Error('Google Drive authorization expired. Please connect Google Drive again.');}
-    }
+    if(r.status===401){accessToken=null;throw new Error('Google authorization expired. Click Connect Google Drive again.');}
     if(!r.ok){let msg='Google Drive request failed ('+r.status+')';try{const j=await r.json();msg=j.error?.message||msg}catch{}throw new Error(msg)}
     return r.status===204?null:r.json();
   }
@@ -146,7 +101,18 @@
     if(!configured())return {ok:false,skipped:true,reason:'not-configured'};
     if(!accessToken)return {ok:false,skipped:true,reason:'not-authorized'};
     try{
-      const local=await getLocal();
+      let local=await getLocal();
+      // Main VMG localStorage is authoritative. This is critical for mobile -> PC.
+      try{
+        const mainRaw=localStorage.getItem('PFM_VMG_MASTER_BASELINE_V1');
+        if(mainRaw){
+          const mainData=JSON.parse(mainRaw);
+          const mainUpdated=mainData&&mainData._sync&&mainData._sync.updatedAt?mainData._sync.updatedAt:'';
+          if(!local || mainUpdated!==local.updatedAt){
+            local=await saveLocal(mainData,'vmg-main-authoritative');
+          }
+        }
+      }catch(e){console.warn('VMG V20 main-data read:',e)}
       if(!local)return {ok:false,error:'No local VMG data found.'};
       let cloud=await findCloud();
       if(!cloud){
@@ -186,13 +152,52 @@
     }catch(e){return {ok:false,conflict:e.code==='VMG_CONFLICT',error:e.message||String(e),remote:e.remote}}
   }
   async function clearQueue(){const q=await all(QUEUE);for(const x of q)await tx(QUEUE,'readwrite',s=>s.delete(x.id))}
-  async function disconnect(){
-    accessToken=null;
-    try{await edgeRequest('disconnect')}catch(e){console.warn('VMG disconnect:',e)}
-  }
+  function disconnect(){accessToken=null}
   function status(){return {online:navigator.onLine,configured:configured(),authorized:!!accessToken,deviceId:deviceId(),lastSync:localStorage.getItem(LAST_SYNC_KEY)||'',fileId:localStorage.getItem(CLOUD_FILE_KEY)||''}}
   window.VMGSync={deviceId,saveLocal,getLocal,exportLocal,sync,status,authorize,autoAuthorize,disconnect,configured,baselineId:BASELINE_ID};
 })();
+/* VMG TRUE BIDIRECTIONAL BRIDGE V20
+   The main VMG application stores its authoritative state in localStorage
+   under PFM_VMG_MASTER_BASELINE_V1. The sync engine also has an IndexedDB
+   cache. V20 makes localStorage authoritative for every sync operation so
+   changes made by the existing VMG UI are never missed.
+*/
+(function(){
+  const KEY='PFM_VMG_MASTER_BASELINE_V1';
+  let lastRaw='';
+  let timer=null;
+  let pushing=false;
+  function raw(){try{return localStorage.getItem(KEY)||''}catch(e){return ''}}
+  async function syncMain(reason){
+    if(pushing||!window.VMGSync)return;
+    const r=raw();
+    if(!r)return;
+    try{
+      const data=JSON.parse(r);
+      pushing=true;
+      // Always mirror the current main-app data into the sync engine first.
+      await VMGSync.saveLocal(data,reason||'vmg-main-data');
+      lastRaw=r;
+      if(VMGSync.status().online && VMGSync.status().authorized){
+        const out=await VMGSync.sync();
+        if(out&&out.conflict)console.warn('VMG V20 sync conflict:',out.error);
+        else if(out&&!out.ok)console.warn('VMG V20 sync:',out.error||out.reason);
+      }
+    }catch(e){console.warn('VMG V20 bridge:',e)}
+    finally{pushing=false}
+  }
+  function schedule(reason){clearTimeout(timer);timer=setTimeout(()=>syncMain(reason),1200)}
+  // Expose the exact hook already called by the frozen VMG Save function.
+  window.vmgDriveScheduleSync=function(){schedule('vmg-save')};
+  // Detect edits saved by individual ledger controls as well as the top Save.
+  setInterval(()=>{const r=raw();if(r&&r!==lastRaw)schedule('vmg-local-change')},1000);
+  window.addEventListener('focus',()=>schedule('foreground'));
+  window.addEventListener('online',()=>schedule('online'));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedule('visible')});
+  window.addEventListener('load',()=>setTimeout(()=>{lastRaw=raw();},500));
+  window.VMGV20SyncMain=syncMain;
+})();
+
 /* VMG AUTO-CONNECT V3 — launch + foreground + network retry.
    Browser-only Google OAuth cannot persist a refresh token. This layer retries
    silent authorization whenever the browser exposes the prior Google grant.
@@ -228,4 +233,65 @@
   window.addEventListener('focus',()=>setTimeout(bootAuto,250));
   window.addEventListener('online',()=>setTimeout(bootAuto,500));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(bootAuto,250)});
+})();
+
+/* VMG BIDIRECTIONAL BRIDGE V19
+   Connects the existing VMG Save/localStorage flow to the V3 sync engine.
+   This is intentionally additive: no financial calculations or data structures
+   are changed. It detects local VMG data changes, queues them, and syncs them.
+*/
+(function(){
+  const KEY='PFM_VMG_MASTER_BASELINE_V1';
+  let lastSnapshot='';
+  let busy=false;
+
+  function snapshot(){
+    try{return localStorage.getItem(KEY)||''}catch(e){return ''}
+  }
+
+  async function pushLocal(reason){
+    if(busy||!window.VMGSync)return;
+    const raw=snapshot();
+    if(!raw||raw===lastSnapshot)return;
+    lastSnapshot=raw;
+    try{
+      const data=JSON.parse(raw);
+      busy=true;
+      await VMGSync.saveLocal(data,reason||'vmg-local-change');
+      if(VMGSync.status().online&&VMGSync.status().authorized){
+        const r=await VMGSync.sync();
+        if(r&&r.conflict)console.warn('VMG V19 sync conflict:',r.error);
+        else if(r&&!r.ok)console.warn('VMG V19 sync failed:',r.error||r.reason);
+      }
+    }catch(e){console.warn('VMG V19 local bridge:',e)}
+    finally{busy=false}
+  }
+
+  function hookSaveButton(){
+    const btn=document.getElementById('save');
+    if(!btn||btn.__vmgV19)return;
+    btn.__vmgV19=true;
+    btn.addEventListener('click',()=>setTimeout(()=>pushLocal('save'),150),true);
+  }
+
+  function watch(){
+    hookSaveButton();
+    const now=snapshot();
+    if(!lastSnapshot)lastSnapshot=now;
+    if(now&&now!==lastSnapshot)pushLocal('local-change');
+  }
+
+  /* Also catches edits that are saved by existing VMG code without clicking
+     the top Save button. The interval is deliberately modest for mobile. */
+  setInterval(watch,1000);
+  window.addEventListener('load',()=>setTimeout(watch,500));
+
+  /* When this device becomes active again, pull/sync through the existing
+     engine. The existing conflict protection remains in force. */
+  window.addEventListener('focus',()=>setTimeout(()=>{
+    if(window.VMGSync?.status().authorized)VMGSync.sync().catch(()=>{});
+  },500));
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden&&window.VMGSync?.status().authorized)setTimeout(()=>VMGSync.sync().catch(()=>{}),500);
+  });
 })();
