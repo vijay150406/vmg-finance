@@ -4,13 +4,17 @@
    through to the network (never cached) since they carry live sync
    data and auth tokens. Bump CACHE_NAME whenever you redeploy the
    app so returning devices pick up the new version. */
-const CACHE_NAME = 'vmg-pfm-v22';
+const CACHE_NAME = 'vmg-pfm-v23';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then((c) => c.addAll(ASSETS))
+      .then((c) => Promise.all(ASSETS.map((url) =>
+        fetch(url, { cache: 'reload' }).then((resp) => {
+          if (resp && resp.ok) return c.put(url, resp);
+        })
+      )))
       .then(() => self.skipWaiting())
   );
 });
@@ -31,7 +35,7 @@ self.addEventListener('fetch', (e) => {
 
   e.respondWith(
     caches.match(e.request).then((cached) => {
-      const network = fetch(e.request)
+      const network = fetch(e.request, { cache: 'no-cache' })
         .then((resp) => {
           if (resp && resp.status === 200) {
             const clone = resp.clone();
