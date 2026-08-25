@@ -10,6 +10,17 @@ VMG MASTER BASELINE V1
 -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>
+/* Safety net: some mobile browsers / installed-PWA webviews don't support
+   structuredClone, which this app relies on from its very first line to
+   load your data. Without this, the whole app fails silently before
+   anything else can run. This must stay the first script in <head>. */
+if(typeof window.structuredClone!=="function"){
+  window.structuredClone=function(obj){
+    return obj===undefined?undefined:JSON.parse(JSON.stringify(obj));
+  };
+}
+</script>
 <!-- VMG PATCH V1.2: MF Planned uses authoritative Planning rows; system-executed cells are locked/grey. Baseline remains unchanged. -->
 <title>Personal Financial Manager — WBS Phase 6.28 • Life-Long Foundation v6</title>
 <link rel="icon" href="./icon-192.png" type="image/png">
@@ -3603,7 +3614,6 @@ let d=(()=>{try{
     }
   }catch(e){console.error("Master baseline initialization:",e)}
 })();
-vmgHistoryPush(); // seed undo history with the state as first loaded
 let page="dashboard";
 const titles={dashboard:"Dashboard",master:"Master",planning:"Planning",income:"Income",investments:"Investments",expenses:"Expenses",loans:"Loans",tax:"Tax",position:"Financial Position",reports:"Reports",guide:"Operating Guide"};
 /* ---------- Undo / Redo ----------
@@ -3675,6 +3685,7 @@ function save(){
   vmgHistoryPush();
   if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();
 }
+vmgHistoryPush(); // seed undo history with the state as first loaded, now that everything above is defined
 /* Whenever a whole-data swap happens (Restore, Excel Import, or any future
    bulk-load), route it through here instead of assigning `d` directly.
    This stamps a fresh sync timestamp on the newly loaded data BEFORE it can
@@ -15511,7 +15522,10 @@ let vmgDriveToken=null,vmgDriveTokenExp=0,vmgDriveTokenClient=null;
 let vmgDriveFileId=localStorage.getItem(DRIVE_FILEID_KEY)||null;
 let vmgDrivePending=false,vmgDriveBusy=false,vmgDriveTimer=null,vmgDriveLastSync=null;
 
-function vmgDriveConfigured(){return DRIVE_CLIENT_ID && DRIVE_CLIENT_ID.indexOf("PASTE_YOUR_")!==0;}
+function vmgDriveConfigured(){
+  try{ return !!(DRIVE_CLIENT_ID && DRIVE_CLIENT_ID.indexOf("PASTE_YOUR_")!==0); }
+  catch(e){ return false; } // called before DRIVE_CLIENT_ID was declared yet — treat as not-yet-ready, never crash
+}
 function vmgDriveTimeAgo(t){
   const s=Math.max(0,Math.round((Date.now()-t)/1000));
   if(s<60)return s+"s ago";
@@ -15650,10 +15664,12 @@ async function vmgDriveUpload(){
   }
 }
 function vmgDriveScheduleSync(){
-  if(!vmgDriveConfigured()||!vmgDriveToken)return;
-  if(!navigator.onLine){vmgDrivePending=true;vmgDriveUpdateUi();return;}
-  clearTimeout(vmgDriveTimer);
-  vmgDriveTimer=setTimeout(vmgDriveUpload,4000);
+  try{
+    if(!vmgDriveConfigured()||!vmgDriveToken)return;
+    if(!navigator.onLine){vmgDrivePending=true;vmgDriveUpdateUi();return;}
+    clearTimeout(vmgDriveTimer);
+    vmgDriveTimer=setTimeout(vmgDriveUpload,4000);
+  }catch(e){ /* called before the Drive sync section finished loading — safe to skip, save() itself already succeeded */ }
 }
 
 /* ---------- Local safety net ----------
