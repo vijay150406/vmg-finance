@@ -12,6 +12,8 @@ VMG MASTER BASELINE V1
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <!-- VMG PATCH V1.2: MF Planned uses authoritative Planning rows; system-executed cells are locked/grey. Baseline remains unchanged. -->
 <title>Personal Financial Manager — WBS Phase 6.28 • Life-Long Foundation v6</title>
+<link rel="icon" href="./icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <style>
 .vmgCompactSummary .stat{padding:6px 8px!important;min-height:0!important;overflow:hidden!important;box-sizing:border-box}
 .vmgCompactSummary .stat small{font-size:10px!important;line-height:1.15!important;display:block;white-space:normal!important}
@@ -1362,6 +1364,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);bo
 <meta name="theme-color" content="#111a2e">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VMG Finance">
 <!-- VMG GIS deferred: loaded only when Google Drive connection is requested. -->
@@ -3498,7 +3501,22 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 <label class="btn secondary">📥 Excel Import<input id="excelImport" type="file" accept=".xls,.xml,text/xml,application/xml" hidden></label>
 <label class="btn secondary">⬆ Restore<input id="restore" type="file" accept=".json" hidden></label>
 <button class="btn secondary" id="vmgRecoverBtn" title="Restore an automatic on-device backup, saved right before any Google Drive sync that would have replaced your data">🛟 Recover</button>
-<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span><span id="drivePwaHint" style="display:none;font-size:11px;color:#b45309;margin-left:2px;white-space:normal">If nothing happens, open this app's web address in a normal browser tab once to connect — it stays connected here afterward too.</span></div>
+<button class="btn secondary" id="vmgUndoBtn" title="Step back to the previous saved state" disabled>↶ Undo</button>
+<button class="btn secondary" id="vmgRedoBtn" title="Step forward again" disabled>↷ Redo</button>
+<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span><span id="vmgOnlineBadge" style="font-size:11px;font-weight:600;margin-left:8px;padding:2px 8px;border-radius:10px;white-space:nowrap"></span><span id="drivePwaHint" style="display:none;font-size:11px;color:#b45309;margin-left:2px;white-space:normal">If nothing happens, open this app's web address in a normal browser tab once to connect — it stays connected here afterward too.</span></div>
+<script>
+(function(){
+  const badge=document.getElementById("vmgOnlineBadge");
+  function update(){
+    if(!badge)return;
+    if(navigator.onLine){badge.textContent="🟢 Online";badge.style.background="#dcfce7";badge.style.color="#166534";}
+    else{badge.textContent="🔴 Offline";badge.style.background="#fee2e2";badge.style.color="#991b1b";}
+  }
+  window.addEventListener("online",update);
+  window.addEventListener("offline",update);
+  update();
+})();
+</script>
 </div>
 <div id="content"></div>
 </main>
@@ -3585,9 +3603,78 @@ let d=(()=>{try{
     }
   }catch(e){console.error("Master baseline initialization:",e)}
 })();
+vmgHistoryPush(); // seed undo history with the state as first loaded
 let page="dashboard";
 const titles={dashboard:"Dashboard",master:"Master",planning:"Planning",income:"Income",investments:"Investments",expenses:"Expenses",loans:"Loans",tax:"Tax",position:"Financial Position",reports:"Reports",guide:"Operating Guide"};
-function save(){localStorage.setItem(KEY,JSON.stringify(d));msg("Data saved in this browser.");if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();}
+/* ---------- Undo / Redo ----------
+   A rolling history of saved states (not per-keystroke — per completed
+   save() call, which is how the app already commits actions). Undo/redo
+   step between these snapshots. History lives in memory only (resets on
+   reload) and never touches your Drive sync or localStorage baseline
+   logic — it's purely an on-device safety net for "oops, undo that". */
+let vmgHistory=[];
+let vmgHistoryIndex=-1;
+let vmgHistoryRestoring=false;
+const VMG_HISTORY_MAX=30;
+function vmgHistoryPush(){
+  if(vmgHistoryRestoring)return;
+  try{
+    const snap=JSON.stringify(d);
+    if(vmgHistoryIndex>=0&&vmgHistory[vmgHistoryIndex]===snap)return;
+    vmgHistory=vmgHistory.slice(0,vmgHistoryIndex+1);
+    vmgHistory.push(snap);
+    if(vmgHistory.length>VMG_HISTORY_MAX)vmgHistory.shift();
+    vmgHistoryIndex=vmgHistory.length-1;
+  }catch(e){console.error("VMG history push failed:",e);}
+  vmgHistoryUpdateUi();
+}
+function vmgUndo(){
+  if(vmgHistoryIndex<=0)return;
+  vmgHistoryIndex--;
+  vmgHistoryRestoreSnapshot(vmgHistory[vmgHistoryIndex]);
+}
+function vmgRedo(){
+  if(vmgHistoryIndex>=vmgHistory.length-1)return;
+  vmgHistoryIndex++;
+  vmgHistoryRestoreSnapshot(vmgHistory[vmgHistoryIndex]);
+}
+function vmgHistoryRestoreSnapshot(json){
+  try{
+    vmgHistoryRestoring=true;
+    d=JSON.parse(json);
+    localStorage.setItem(KEY,JSON.stringify(d));
+    render();
+    msg("Restored a previous version. Undo/redo again if this wasn't the one you wanted.");
+    if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();
+  }catch(e){
+    console.error("VMG undo/redo restore failed:",e);
+    alert("⚠️ Couldn't restore that version — nothing was changed.");
+  }finally{
+    vmgHistoryRestoring=false;
+    vmgHistoryUpdateUi();
+  }
+}
+function vmgHistoryUpdateUi(){
+  const u=document.getElementById("vmgUndoBtn"),r=document.getElementById("vmgRedoBtn");
+  if(u)u.disabled=vmgHistoryIndex<=0;
+  if(r)r.disabled=vmgHistoryIndex>=vmgHistory.length-1;
+}
+function save(){
+  try{
+    const json=JSON.stringify(d);
+    if(!json||json.length<20||!Array.isArray(d.financialYears)){
+      throw new Error("Refused to save: data looks incomplete or corrupted.");
+    }
+    localStorage.setItem(KEY,json);
+    msg("Data saved in this browser.");
+  }catch(e){
+    console.error("VMG save() blocked a bad write:",e);
+    alert("⚠️ Save was blocked because the data looked incomplete or corrupted, to avoid overwriting your saved data with something broken. Nothing was changed. Please reload the page and try again — if this keeps happening, let me know.");
+    return;
+  }
+  vmgHistoryPush();
+  if(typeof vmgDriveScheduleSync==="function")vmgDriveScheduleSync();
+}
 /* Whenever a whole-data swap happens (Restore, Excel Import, or any future
    bulk-load), route it through here instead of assigning `d` directly.
    This stamps a fresh sync timestamp on the newly loaded data BEFORE it can
@@ -14121,6 +14208,9 @@ function phase630ExportExcelVisual(){
 
 if(document.getElementById("excelExport"))document.getElementById("excelExport").onclick=phase630ExportExcelVisual;
 if(document.getElementById("vmgRecoverBtn"))document.getElementById("vmgRecoverBtn").onclick=()=>{if(typeof vmgShowAutoBackupPicker==="function")vmgShowAutoBackupPicker();else alert("Recovery isn't available yet.");};
+if(document.getElementById("vmgUndoBtn"))document.getElementById("vmgUndoBtn").onclick=()=>vmgUndo();
+if(document.getElementById("vmgRedoBtn"))document.getElementById("vmgRedoBtn").onclick=()=>vmgRedo();
+vmgHistoryUpdateUi();
 if(document.getElementById("excelImport"))document.getElementById("excelImport").onchange=e=>{const f=e.target.files[0];phase630ImportExcel(f);e.target.value=""};
 document.getElementById("menubtn").onclick=()=>document.getElementById("side").classList.toggle("open");
 document.querySelectorAll(".menu button").forEach(function(btn){
@@ -15428,6 +15518,16 @@ function vmgDriveTimeAgo(t){
   const m=Math.round(s/60);if(m<60)return m+"m ago";
   const h=Math.round(m/60);return h+"h ago";
 }
+function vmgFriendlyDevice(ua){
+  ua=ua||"";
+  if(/iPhone/i.test(ua))return"📱 iPhone";
+  if(/iPad/i.test(ua))return"📱 iPad";
+  if(/Android/i.test(ua))return/Mobile/i.test(ua)?"📱 Android":"📱 Android tablet";
+  if(/Macintosh/i.test(ua))return"💻 Mac";
+  if(/Windows/i.test(ua))return"💻 Windows PC";
+  if(/Linux/i.test(ua))return"💻 Linux PC";
+  return"a device";
+}
 function vmgDriveUpdateUi(){
   const btn=document.getElementById("driveSync"),st=document.getElementById("driveStatus");
   if(!btn||!st)return;
@@ -15435,11 +15535,12 @@ function vmgDriveUpdateUi(){
     btn.textContent="🔗 Drive Sync (not set up)";st.textContent="See SYNC-SETUP.md";btn.title="Set DRIVE_CLIENT_ID in this file to enable Google Drive sync — see SYNC-SETUP.md";return;
   }
   const fileTag=vmgDriveFileId?" [file …"+vmgDriveFileId.slice(-6)+"]":"";
+  const lastEditor=d&&d._sync&&d._sync.device?" — last edited on "+vmgFriendlyDevice(d._sync.device):"";
   if(vmgDriveToken){
     btn.textContent="🔄 Sync Now";
     if(!navigator.onLine)st.textContent="Offline — will sync when back online"+fileTag;
     else if(vmgDriveBusy)st.textContent="Syncing…"+fileTag;
-    else if(vmgDriveLastSync)st.textContent="Synced "+vmgDriveTimeAgo(vmgDriveLastSync)+fileTag;
+    else if(vmgDriveLastSync)st.textContent="Synced "+vmgDriveTimeAgo(vmgDriveLastSync)+lastEditor+fileTag;
     else st.textContent="Connected"+fileTag;
   }else{
     btn.textContent="🔗 Connect Google Drive";st.textContent="Not connected";
