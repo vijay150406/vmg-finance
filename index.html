@@ -22,7 +22,7 @@ if(typeof window.structuredClone!=="function"){
 }
 </script>
 <!-- VMG PATCH V1.2: MF Planned uses authoritative Planning rows; system-executed cells are locked/grey. Baseline remains unchanged. -->
-<title>Personal Financial Manager — WBS Phase 6.28 • Life-Long Foundation v6</title>
+<title>VMG Personal Financial Manager</title>
 <link rel="icon" href="./icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <style>
@@ -78,9 +78,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 7px;b
 .rate542{width:55px;border:0;background:transparent;text-align:center}
 .salary542Card .notice{margin-bottom:8px}
 
-/* Phase 631 — visual execution/lifecycle status. Grey is NOT disabled. */
 .vmg-status-grey{background:#e5e7eb!important;color:#374151!important;box-shadow:inset 0 0 0 1px #d1d5db!important;background-clip:padding-box!important;}
-/* Phase 632: highlight only the actual editable value/control area, never the surrounding table cell. */
 
 .vmg-input-grey{background:#e5e7eb!important;color:#374151!important;border-color:#d1d5db!important;box-shadow:inset 0 0 0 1px #d1d5db!important;}
 .vmg-inner-grey{display:inline-flex!important;align-items:center!important;background:#e5e7eb!important;color:#374151!important;border:1px solid #d1d5db!important;border-radius:6px!important;padding:3px 6px!important;box-sizing:border-box!important;}
@@ -96,6 +94,28 @@ td > span.vmg-status-grey > input[type="checkbox"]{margin:0!important;vertical-a
 .vmg-salary-exec-cell{display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:28px;padding:3px 8px;border-radius:6px;}
 td.vmg-status-grey .vmg-salary-exec-cell{background:#e5e7eb;border:1px solid #d1d5db;box-shadow:inset 0 0 0 1px #d1d5db;}
 .vmg-salary-exec-cell input[type="checkbox"]{margin:0!important;}
+
+/* VMG grey-cell refinement: the table cell stays normal; grey belongs only to the locked value/control. */
+td.vmg-status-grey{background:transparent!important;color:inherit!important;box-shadow:none!important;padding:inherit!important;}
+td.vmg-status-grey > input,
+td.vmg-status-grey > select,
+td.vmg-status-grey > textarea{background:#e5e7eb!important;color:#374151!important;border:1px solid #d1d5db!important;box-shadow:inset 0 0 0 1px #d1d5db!important;border-radius:6px!important;box-sizing:border-box!important;}
+td.vmg-status-grey > .vmg-grey-value,
+td.vmg-status-grey > span.vmg-grey-value{display:inline-block!important;background:#e5e7eb!important;color:#374151!important;border:1px solid #d1d5db!important;box-shadow:inset 0 0 0 1px #d1d5db!important;border-radius:6px!important;padding:4px 8px!important;box-sizing:border-box!important;}
+td.vmg-status-grey .vmg-salary-exec-cell{display:inline-flex!important;align-items:center!important;justify-content:center!important;background:#e5e7eb!important;border:1px solid #d1d5db!important;box-shadow:inset 0 0 0 1px #d1d5db!important;border-radius:6px!important;padding:3px 6px!important;box-sizing:border-box!important;}
+
+/* VMG: number inputs must not show spinner controls.
+   Scrolling over a numeric field must never alter its value. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{
+  -webkit-appearance:none!important;
+  appearance:none!important;
+  margin:0!important;
+}
+input[type="number"]{
+  -moz-appearance:textfield!important;
+  appearance:textfield!important;
+}
 </style></style></style></style>
 </style>
 <style>
@@ -324,7 +344,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 }
 </style>
 
-
 <style id="phase617-investment-summary-expand">
 .phase617-ledger-row{background:#f4f7fb;border-top:1px solid #dbe3ec}
 .phase617-ledger-row td{font-size:13px;padding:8px 7px}
@@ -336,7 +355,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 }
 .phase617-plus:hover{background:#eef2f7}
 </style>
-
 
 <style id="phase618-ncd-fast-entry">
 .phase618-plus{
@@ -351,7 +369,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .phase618-quickentry textarea{min-width:360px;font:12px monospace;padding:7px;border:1px solid #cbd5e1;border-radius:6px}
 </style>
 
-
 <style id="phase619-ncd-payout-scroll">
 .phase619-payoutsetup{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:9px 0}
 .phase619-payoutsetup label{display:flex;flex-direction:column;gap:3px}
@@ -364,7 +381,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .ncdMainTable th:first-child,.ncdMainTable th:nth-child(2){background:#f8fafc}
 </style>
 
-
 <style id="phase620b-ncd-working-fix">
 .ncdMainTable{min-width:1250px}
 .phase618-ncd-details>td{min-width:900px}
@@ -372,12 +388,10 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .phase618-ncd-details table{min-width:620px}
 </style>
 
-
 <style id="phase621-ncd-paste-fix">
 .ncdInterestInput{min-width:105px}
 .phase619-note{max-width:760px}
 </style>
-
 
 <style id="phase623-tools">
 .topright{gap:6px}
@@ -388,7 +402,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
   .card{box-shadow:none!important;break-inside:avoid}
 }
 </style>
-
 
 <style id="phase625-employee-benefits">
 .phase625-employee-benefits-card{padding:0;overflow:hidden}
@@ -467,6 +480,24 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .p700-svg text{font-family:Arial,Helvetica,sans-serif}
 </style>
 
+<style id="phase-allocation-guidance-style">
+.vmg-allocation-card .vmg-alloc-table{width:100%;min-width:760px;border-collapse:collapse}
+.vmg-allocation-card .vmg-alloc-table th,.vmg-allocation-card .vmg-alloc-table td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.vmg-allocation-card .vmg-alloc-table th{text-align:center;font-size:11px;white-space:nowrap}
+.vmg-allocation-card .vmg-alloc-table th:first-child,.vmg-allocation-card .vmg-alloc-table td:first-child{text-align:left}
+.vmg-allocation-card .vmg-alloc-table td:nth-child(3),.vmg-allocation-card .vmg-alloc-table td:nth-child(4){text-align:right}
+.vmg-allocation-card .vmg-target-input{width:82px;max-width:100%;box-sizing:border-box;text-align:right;border:1px solid var(--line);border-radius:6px;padding:5px 6px;background:#fff;color:var(--text);font:inherit}
+.vmg-allocation-card .vmg-target-input:focus{outline:2px solid rgba(37,99,235,.18);border-color:var(--blue)}
+.vmg-alloc-guidance{display:inline-flex;align-items:center;justify-content:center;min-width:88px;padding:4px 8px;border-radius:999px;font-weight:700;font-size:12px;white-space:nowrap}
+.vmg-alloc-up{background:#dcfce7;color:#166534}.vmg-alloc-down{background:#fee2e2;color:#991b1b}.vmg-alloc-neutral{background:#f3f4f6;color:#4b5563}.vmg-alloc-auto{background:#dbeafe;color:#1d4ed8}
+.vmg-alloc-total{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:9px;padding:8px 10px;border-top:1px solid var(--line);font-size:12px}
+.vmg-alloc-total.good{color:#166534}.vmg-alloc-total.partial{color:#92400e}.vmg-alloc-total.bad{color:#991b1b}
+.vmg-alloc-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;font-size:12px}
+.vmg-alloc-action{padding:5px 8px;border-radius:999px;background:#f3f4f6}.vmg-alloc-action.up{background:#dcfce7;color:#166534}.vmg-alloc-action.down{background:#fee2e2;color:#991b1b}.vmg-alloc-action.auto{background:#dbeafe;color:#1d4ed8}
+.vmg-alloc-note{font-size:11px;color:var(--muted);line-height:1.35;margin-top:7px}
+@media(max-width:600px){.vmg-allocation-card .vmg-alloc-table{min-width:720px}.vmg-allocation-card .vmg-target-input{width:72px}.vmg-alloc-guidance{min-width:78px}}
+</style>
+
 <style id="vmg-planning-reference-fix">
 .horizontalPlan.planAligned.plan-investment{table-layout:fixed;width:1590px;min-width:1590px}
 .horizontalPlan.planAligned.plan-investment th,.horizontalPlan.planAligned.plan-investment td{box-sizing:border-box;white-space:nowrap;vertical-align:middle}
@@ -499,7 +530,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 }
 </style>
 
-
 <style id="vmg-altgraff-tracking-columns">
 /* AltGraff tracking columns — intentionally prominent and fixed-width */
 .altgraffTrackingTable{min-width:1650px!important;width:1650px!important;border-collapse:collapse!important}
@@ -511,7 +541,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
 .altgraffTrackingTable .ag-tracking-head{font-size:13px!important;font-weight:800!important;text-align:center!important}
 .altgraffTrackingNote{font-size:14px!important;font-weight:700!important;padding:10px!important;margin:8px 0!important;border:2px solid #333!important}
 </style>
-
 
 <style id="vmg-altgraff-member-tracking-v631">
 .altGraffMemberTrackingTable{min-width:1550px!important;width:1550px!important;border-collapse:collapse!important}
@@ -583,7 +612,6 @@ table{font-size:12px}th,td{padding:7px}th{font-weight:700;background:#f7f8fa}inp
   box-shadow:inset 0 0 0 1px #d1d5db!important;
 }
 </style>
-
 
 <style id="vmg-v642-professional-cosmetic-only">
 /*
@@ -1062,7 +1090,6 @@ table:not(.horizontalPlan) tbody tr:last-child td{
 }
 </style>
 
-
 <style id="vmg-v643-month-cell-alignment">
 /* Cosmetic-only alignment:
    Month headings are centered over their exact month cells.
@@ -1124,7 +1151,6 @@ input.num{
   font-variant-numeric:tabular-nums;
 }
 </style>
-
 
 <style id="vmg-v644-exact-month-alignment">
 /* v6.44 — cosmetic only.
@@ -1224,7 +1250,6 @@ table.horizontalPlan.planAligned.plan-balance tr.total td:nth-child(n+2):nth-chi
   text-align:right!important;
 }
 </style>
-
 
 <style id="vmg-v645-direct-render-alignment">
 /* v6.45 — direct render alignment guard; cosmetic only */
@@ -1494,7 +1519,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-responsive-v1">
 /*
   VMG MOBILE RESPONSIVE V1
@@ -1745,7 +1769,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-responsive-v2-compact">
 /* MOBILE PLANNING GRID COMPACT V2
    Layout-only patch: compact descriptor columns and month cells on phones.
@@ -1875,7 +1898,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-responsive-v3">
 /* VMG MOBILE RESPONSIVE V3
    Global compact mobile presentation + deferred Google GIS loading.
@@ -1955,7 +1977,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <script id="vmg-deferred-google-gis">
 (function(){
   window.VMG_loadGoogleGIS = function(){
@@ -1982,7 +2003,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   };
 })();
 </script>
-
 
 <style id="vmg-mobile-responsive-v4-ultracompact">
 /* VMG MOBILE RESPONSIVE V4 — ULTRA COMPACT TABLES
@@ -2132,7 +2152,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   .horizontalPlan:not(.expensePlan):not(.fundBalancePlan) td:nth-child(3){left:128px!important;}
 }
 </style>
-
 
 <style id="vmg-mobile-all-screens-v5">
 /*
@@ -2345,7 +2364,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-iphone-xr-v6">
 /*
   VMG MOBILE V6 — iPhone XR target
@@ -2432,7 +2450,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   }
 }
 </style>
-
 
 <style id="vmg-mobile-maxmonths-v7">
 /*
@@ -2545,7 +2562,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   }
 }
 </style>
-
 
 <style id="vmg-mobile-investment-actual-v8">
 /*
@@ -2692,7 +2708,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   }
 }
 </style>
-
 
 <style id="vmg-mobile-expense-balance-v10">
 /*
@@ -2886,7 +2901,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-true-column-alignment-v11">
 /*
   VMG MOBILE V11
@@ -3010,7 +3024,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   }
 }
 </style>
-
 
 <style id="vmg-mobile-column-alignment-v12">
 /*
@@ -3196,7 +3209,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-
 <style id="vmg-mobile-pixel-aligned-v13">
 /*
  VMG MOBILE V13 — PIXEL ALIGNMENT
@@ -3309,7 +3321,6 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
   }
 }
 </style>
-
 
 <style id="vmg-mobile-v14-exact-common-grid">
 /*
@@ -3485,10 +3496,37 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 }
 </style>
 
-</head>
+
+<style id="vmg-v8-grey-input-cell-fix">
+/* Locked/system-calculated value: grey only inside the value control, not the whole table cell. */
+.horizontalPlan.planAligned.plan-investment td:has(> input.vmg-input-grey),
+.horizontalPlan.planAligned.plan-expense td:has(> input.vmg-input-grey),
+.horizontalPlan.planAligned.plan-investment td:has(.moneyCell.vmg-input-grey),
+.horizontalPlan.planAligned.plan-expense td:has(.moneyCell.vmg-input-grey){
+  background:#fff!important;
+}
+.horizontalPlan.planAligned.plan-investment .moneyCell.vmg-input-grey,
+.horizontalPlan.planAligned.plan-expense .moneyCell.vmg-input-grey{
+  background:#e5e7eb!important;
+  color:#374151!important;
+  border:1px solid #d1d5db!important;
+  box-shadow:inset 0 0 0 1px #d1d5db!important;
+}
+</style>
+<style id="vmg-v9-grey-inside-cell-final">
+.horizontalPlan.planAligned.plan-investment td,
+.horizontalPlan.planAligned.plan-expense td{overflow:hidden!important;}
+.horizontalPlan.planAligned.plan-investment td > input.moneyCell.vmg-input-grey,
+.horizontalPlan.planAligned.plan-expense td > input.moneyCell.vmg-input-grey,
+.horizontalPlan.planAligned.plan-investment td > select.vmg-input-grey,
+.horizontalPlan.planAligned.plan-expense td > select.vmg-input-grey{
+  display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;
+  box-sizing:border-box!important;margin:0!important;
+}
+</style></head>
 <body>
 <div class="side" id="side">
-<div class="brand">Personal Financial Manager<small>WBS • Phase 6.28 • Life-Long Foundation v6</small></div>
+<div class="brand">Personal Financial Manager</div>
 <div class="menu">
 <button class="active" data-p="dashboard">🏠 Dashboard</button>
 <button data-p="master">⚙ Master</button>
@@ -3514,7 +3552,7 @@ table tr.total td:first-child,table tr.section td:first-child{background:#f1f4fa
 <button class="btn secondary" id="vmgRecoverBtn" title="Restore an automatic on-device backup, saved right before any Google Drive sync that would have replaced your data">🛟 Recover</button>
 <button class="btn secondary" id="vmgUndoBtn" title="Step back to the previous saved state" disabled>↶ Undo</button>
 <button class="btn secondary" id="vmgRedoBtn" title="Step forward again" disabled>↷ Redo</button>
-<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span><span id="vmgOnlineBadge" style="font-size:11px;font-weight:600;margin-left:8px;padding:2px 8px;border-radius:10px;white-space:nowrap"></span><span id="drivePwaHint" style="display:none;font-size:11px;color:#b45309;margin-left:2px;white-space:normal">If nothing happens, open this app's web address in a normal browser tab once to connect — it stays connected here afterward too.</span></div>
+<button class="btn secondary" id="driveSync">🔗 Connect Google Drive</button><span id="driveStatus" style="font-size:11px;color:var(--muted,#6b7488);margin-left:2px;white-space:nowrap">Not connected</span><span id="vmgOnlineBadge" style="font-size:11px;font-weight:600;margin-left:8px;padding:2px 8px;border-radius:10px;white-space:nowrap"></span></div>
 <script>
 (function(){
   const badge=document.getElementById("vmgOnlineBadge");
@@ -3600,6 +3638,20 @@ let d=(()=>{try{
   if(!merged.leaveGratuity)merged.leaveGratuity=structuredClone(blank.leaveGratuity);
   return merged;
 }catch(e){return structuredClone(blank)}})();
+(function migrateProfessionalTaxSource(){
+  try{
+    d.taxSettings=d.taxSettings||{};
+    let v=Number(d.taxSettings.professionalTaxMonthly);
+    if(!Number.isFinite(v)||v<0){
+      const first=(d.salaryPlans||[]).map(x=>Number(x.professionalTax)).find(x=>Number.isFinite(x)&&x>0);
+      v=Number.isFinite(first)?first:200;
+    }
+    if(!Array.isArray(d.taxSettings.professionalTaxRates)||!d.taxSettings.professionalTaxRates.length){
+      d.taxSettings.professionalTaxRates=[{effectiveFrom:'2026-04',monthly:v}];
+    }
+    d.taxSettings.professionalTaxMonthly=v;
+  }catch(e){console.warn('Professional Tax source migration:',e);}
+})();;
 (function establishMasterBaseline(){
   try{
     const marker="VMG_MASTER_BASELINE_V1_INITIALIZED";
@@ -3897,8 +3949,6 @@ function phase523SyncAllSalaryExecutions(fy){
   if(changed)saveDataNoToast();
 }
 
-
-
 function toggle54Salary(fy,month,val){
   const rows=salaryRows(fy);
   const row=rows.find(x=>String(x.month).toLowerCase().startsWith(String(month).toLowerCase().slice(0,3)));
@@ -3945,7 +3995,6 @@ function toggle54Salary(fy,month,val){
   save();
   render();
 }
-
 
 function phase57SyncExpensesFromSalary(fy){
   ensure54Arrays();
@@ -4043,7 +4092,6 @@ function phase57ExpenseLedgerCard(fy){
     </tbody></table></div>
   </div>`;
 }
-
 
 function phase511ExpensePage(fy){
   if(!Array.isArray(d.expensePlans))d.expensePlans=[];
@@ -4152,7 +4200,7 @@ function phase54ExecutionPage(fy){
     <td><input type="checkbox" ${x.executed?"checked":""} onchange="phase57UpdateExpense('${esc(x.id)}','executed',this.checked)"></td>
   </tr>`).join("");
 
-  return `<div class="card"><h2>Phase 5.4 — Salary Execution & Cashflow</h2>
+  return `<div class="card"><h2>Salary Execution & Cashflow</h2>
   <div class="notice"><b>Execution rule:</b> Salary is received at month-end. Investment and Expense planning starts from <b>May</b>. Only executed items enter the execution ledger. Employer PF is posted when salary is marked received; EPS ₹1,250 is separated.</div>
   <div class="grid" style="margin-top:12px">
    <div class="stat"><small>Executed Investments</small><b>₹${fmt(invTotal)}</b></div>
@@ -4184,8 +4232,6 @@ function phase54ExecutionPage(fy){
   ${ledger.map(x=>`<tr><td>${esc(x.month)}</td><td>${esc(x.kind)}</td><td>${esc(x.description)}</td><td>₹${fmt(x.amount)}</td><td>Executed</td></tr>`).join("")||'<tr><td colspan="5" class="empty">No executed transactions yet.</td></tr>'}</tbody></table></div></div>
 `;
 }
-
-
 
 function ensureMutualFundLedger54(){
   if(!d.mutualFundLedger)d.mutualFundLedger={};
@@ -4284,7 +4330,6 @@ function phase54PostMutualFund(row){
   }
 }
 
-
 function ensurePPFLedger54(){
   if(!d.ppfLedger54)d.ppfLedger54={};
   ["PPF - RASHI","PPF - SWETA","PPF - VIJAY"].forEach(k=>{
@@ -4346,7 +4391,6 @@ function phase54PostEPFLedgerDetailed(fy,month){
   });
 }
 
-
 function phase54EPFSummary(fy){
   const rows=salaryRows(fy);
   let employee=0, employer=0, eps=0, netEmployer=0;
@@ -4361,7 +4405,6 @@ function phase54EPFSummary(fy){
   return {employee,employer,eps,netEmployer};
 }
 
-
 function ensureSuperLedger54(){
   if(!d.superLedger54)d.superLedger54={opening:0,transactions:[],proposedRate:0};
   if(!Array.isArray(d.superLedger54.transactions))d.superLedger54.transactions=[];
@@ -4372,8 +4415,6 @@ function phase54SuperAmount(fy,month){
   const c=monthlyCTC(getCTC(fy));
   return p ? Number(c.super)||0 : 0;
 }
-
-
 
 function phase558SetSuperRate(value){
   ensureSuperLedger54();
@@ -4457,7 +4498,6 @@ function phase558SuperLedgerCard(fy,member){
   </div>`;
 }
 
-
 function phase54PostSuper(fy,month){
   ensureSuperLedger54();
   const salaryMonth=phase579InvestmentSalaryTriggerMonth(month);
@@ -4499,8 +4539,6 @@ function phase579SyncSuperFromSalary(fy){
       });
   });
 }
-
-
 
 function phase564NPSMembers(){
   ensureNPSLedger54();
@@ -4668,7 +4706,6 @@ function phase564NPSMemberSubtab(member){
   }
 }
 
-
 function phase568RemoveNPSLegacyTabs(){
   // Legacy compatibility only. NPS member tabs are generated from Master → Family Members.
 }
@@ -4682,7 +4719,6 @@ function phase564NPSNav(active){
     ${members.map(m=>`<button type="button" class="${m.toLowerCase()===a?"active":""}" onclick="phase564NPSMemberSubtab('${esc(m)}')">${esc(m)}</button>`).join("")}
   </div>`;
 }
-
 
 function phase564NPSMemberSubtab(member){
   const fy=d.selectedFY || (getFY()?.label || "");
@@ -4721,7 +4757,6 @@ function phase54PostNPS(row){
     });
   }
 }
-
 
 let phase582EPFActiveMember="Vijay";
 /* ==================== EPF / EPS LEDGER — MEMBER-WISE ==================== */
@@ -5217,14 +5252,11 @@ function phase54PostFD(row){
   }
 }
 
-
 function phase54SyncFDAccount(id){
   const row=(d.investmentPlans||[]).find(x=>String(x.id)===String(id));
   if(!row || String(row.type)!=="FD")return;
   row.ledgerAccount=`FD - ${String(row.member||"Vijay").toUpperCase()} - ${String(row.institution||"SBI").toUpperCase()}`;
 }
-
-
 
 function phase54FDNormalizeManualDate(input){
   if(!input)return;
@@ -5285,7 +5317,6 @@ function phase54FDUpdateCalc(id,key,val){
   phase54PostFD(row); save(); render();
 }
 
-
 function phase54FDSetDateFromManual(id,val){
   const row=(d.investmentPlans||[]).find(x=>String(x.id)===String(id));
   if(!row)return;
@@ -5328,8 +5359,6 @@ function phase54FDDisplayDMY(iso){
   const d=phase54FDParseDate(iso||"");
   return d?`${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`:"";
 }
-
-
 
 function ensureNCDLedger54(){
   if(!Array.isArray(d.ncdLedger54))d.ncdLedger54=[];
@@ -5429,8 +5458,6 @@ function phase54NCDDeleteSchedule(id,idx){
   if(!row || !Array.isArray(row.schedule))return;
   row.schedule.splice(idx,1);phase54PostNCD(row);save();render();
 }
-
-
 
 function ncdEnsureRow54(member){
   ensureNCDLedger54();
@@ -6334,8 +6361,6 @@ function phase54InterestLedgerCard(member){
   </div>`;
 }
 
-
-
 function phase534EnsureLedgers(){
   if(!Array.isArray(d.altGraffLedger57))d.altGraffLedger57=[];
   if(!Array.isArray(d.altGraffLedger54))d.altGraffLedger54=[];
@@ -6591,6 +6616,9 @@ function phase529SetLICMemberView(view){
   phase529LICMemberView=view||"Vijay";
   render();
 }
+function phase529LICMemberSubtab(member){
+  phase529SetLICMemberView(member);
+}
 
 function phase529AddLIC(){
   phase529EnsureAdditionalLedgers();
@@ -6679,7 +6707,6 @@ function phase529SetLedgerOpening(kind,key,value){
 }
 
 function phase523SetLedgerOpening(kind,key,value){phase529SetLedgerOpening(kind,key,value);}
-
 
 function phase534RebuildExecutedInvestments(fy){
   ensure54Arrays();
@@ -6860,9 +6887,6 @@ function phase535SyncActualAmount(row){
   return phase535ActualAmount(row);
 }
 
-
-
-
 function phase541EnsureLedgerOverrides(){
   if(!d.ledgerPlanOverrides || typeof d.ledgerPlanOverrides!=="object")d.ledgerPlanOverrides={};
 }
@@ -6917,7 +6941,6 @@ function phase538MonthLedgerBox(fy,kind,label,accounts){
     </table></div>
   </div>`;
 }
-
 
 function phase541EnsureSalaryOverrides(){
   if(!d.salaryLedgerOverrides || typeof d.salaryLedgerOverrides!=="object")d.salaryLedgerOverrides={};
@@ -7038,7 +7061,6 @@ function phase536SalaryLedger(fy){
     </table></div>
   </div>`;
 }
-
 
 function phase542InitSalaryLedger(){
   if(!d.salaryLedger542)d.salaryLedger542={};
@@ -7293,8 +7315,6 @@ function phase542SalaryLedger(fy){
   </div>`;
 }
 
-
-
 function phase543EnsurePPFSettings(){
   if(!d.ppfLedgerOverrides)d.ppfLedgerOverrides={};
   if(d.ppfInterestRate==null)d.ppfInterestRate=7.1;
@@ -7318,8 +7338,6 @@ function phase543SetPPFRate(value){
   save();render();
 }
 
-
-
 function phase543ClearPPFAutoExecuted(row){
   if(!d.ppfLedgerOverrides)return;
   const account=row.ledgerAccount||`PPF - ${String(row.member||"Vijay").trim().toUpperCase()}`;
@@ -7327,8 +7345,6 @@ function phase543ClearPPFAutoExecuted(row){
   const key=[row.fy,account,month,"executed"].join("|");
   delete d.ppfLedgerOverrides[key];
 }
-
-
 
 function phase543SyncPPFAutoExecution(fy){
   ensure54Arrays();
@@ -7495,7 +7511,6 @@ function phase543SetPPFCell(fy,acc,month,field,value){
   save();render();
 }
 
-
 function phase598CleanMFPlanning(){
   // v15: Do not rewrite funding sources. Planning data is authoritative and
   // My Salary / Wife Salary / Other Sources must remain exactly as entered.
@@ -7537,9 +7552,6 @@ function mfInit(){
 function mfSourceKey(fy,member,month,source){
   return [fy,member,month,source].join("|");
 }
-
-
-
 
 function mfNormalizeMember(name){
   const s=String(name||"").trim().toLowerCase();
@@ -7584,7 +7596,6 @@ function mfPlanRows(fy,member,month,source){
     return mfSourceLabel(r.source||r.fundingSource)===src;
   });
 }
-
 
 function phase526MasterSourceMembers(){
   const out=[];
@@ -7784,7 +7795,6 @@ function mfAutoExecute(fy,member,month){
   return p.salary;
 }
 
-
 function mfAssignLegacyMFPlansToMember(fy,member){
   const rows=(d.investmentPlans||[]).filter(r=>r&&r.fy===fy&&String(r.type)==="Mutual Fund"&&!r.member);
   if(!rows.length){alert("No legacy MF planning rows without a Member were found.");return;}
@@ -7892,7 +7902,7 @@ function mfLedgerCard(fy,member){
       </div>
     </div>
 
-    <div class="notice" style="display:block!important;margin:8px 0"><b>Summary reconciliation:</b> Ledger corpus ₹${fmt(running)} + separate interest ₹${fmt(interest)} vs Financial Position ₹${fmt(summaryCorpus)} + ₹${fmt(summaryInterest)} — <b>${Math.abs(mfReconcileDiff)<0.5?"OK":"CHECK"}</b></div>
+    
     <h3>MF Ledger</h3>
     <div style="overflow:auto"><table class="compact mfLedgerFinal">
       <thead><tr><th>Month</th><th>Planned</th><th>Executed</th><th>Redemption</th><th>Closing Balance</th></tr></thead>
@@ -7912,8 +7922,6 @@ function mfLedgerCard(fy,member){
     </table></div>
   </div>`;
 }
-
-
 
 function phase612FDMaturityByMember(){
   ensureFDLedger58();
@@ -8265,7 +8273,7 @@ function renderInvestments54(fy){
       <tr class="total-row"><td colspan="3"><b>TOTAL</b></td><td><b>₹${fmt(summaryTotal)}</b></td><td>—</td><td><b>₹${fmt(summaryInterest)}</b></td><td><b>₹${fmt(summaryTotal+summaryInterest)}</b></td></tr>
       </tbody>
     </table></div>
-    <div style="margin-top:8px;font-size:11px;color:#667085">Same Member + Ledger + Sub-Ledger/Account entries are clubbed into one row. Summary order follows the ledger order, then member order. AltGraff interest includes Active, Reinvested and Matured cycles so historical interest is retained.</div>
+    
   </div>
   ${phase632WithdrawalRegisterCard(fy)}
   ${(()=>{
@@ -8513,8 +8521,6 @@ ${(d.altGraffLedger57||[]).map(x=>{
   ${phase564APYNav(phase564APYMembers()[0]||"Sweta")}
   ${phase564APYLedgerCard(fy,phase564APYMembers()[0]||"Sweta")}
 
-
-
   <div class="card">
     <h2>NSC Ledger — Existing Certificates</h2>
     <div class="notice">Enter existing NSC certificates here. ROI is calculated from principal, maturity amount and actual investment-to-maturity duration.</div>
@@ -8538,9 +8544,7 @@ ${(d.altGraffLedger57||[]).map(x=>{
     <h2>LIC Ledger — Member-wise Sub Ledger</h2>
     <div class="notice">Each LIC policy is shown under its member. Use the member tabs to focus on one policy. Actual bonus is entered only when declared; future bonus is projected automatically from the compounded growth rate derived from actual bonus history. The ₹3,00,000 maturity remains a planning assumption.</div>
     <p><button type="button" class="small" onclick="phase529AddLIC()">+ Add LIC Policy</button></p>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px">
-      ${(d.members||[]).filter(m=>m&&m.active!==false).map(m=>`<button type="button" class="small" style="font-weight:${phase529LICMemberView===String(m.name)?"700":"400"};background:${phase529LICMemberView===String(m.name)?"#e5e7eb":""}" onclick="phase529SetLICMemberView('${esc(String(m.name))}')">${esc(m.name)}</button>`).join("")}
-    </div>
+    ${phase516MakeSubtabs("LIC",(d.members||[]).filter(m=>m&&m.active!==false).map(m=>({key:String(m.name).toLowerCase(),label:String(m.name)})),String(phase529LICMemberView||"Vijay").toLowerCase(),"phase529LICMemberSubtab")}
     ${(()=>{
       const all=(d.licLedger54||[]);
       const selected=all.filter(x=>String(x.member||"").toLowerCase()===String(phase529LICMemberView).toLowerCase());
@@ -8686,7 +8690,6 @@ function phase516IncomeSubtab(key){
     {key:"history",label:"Historical Salary / CTC",match:["Historical Salary / CTC","CTC History & Hike Rule","CTC History"]},
     {key:"leave",label:"Leave & Gratuity",match:["Leave Planning","Leave & Gratuity"]},
     {key:"other",label:"Other Taxable / Future Income",match:["Other Taxable Income / Known Future Income"]},
-    {key:"interest",label:"Interest Income — Member-wise",match:["NCD Interest","Interest Ledger","AltGraff Interest"]},
   ];
   const oldCards=Array.from(c.querySelectorAll(":scope > .card"));
   const tabs=document.createElement("div");
@@ -8696,6 +8699,7 @@ function phase516IncomeSubtab(key){
   shell.id="phase516IncomePane";
   oldCards.forEach(card=>{
     const h=(card.querySelector("h2")?.textContent||"").trim();
+    if(/NCD Interest|Interest Ledger|AltGraff Interest/i.test(h)) return;
     const target=groups.find(g=>g.match.some(m=>h.toLowerCase().includes(m.toLowerCase())))||groups[0];
     card.dataset.phase516Group=target.key;
     if(target.key===key)shell.appendChild(card);
@@ -8893,9 +8897,6 @@ function phase516InvestmentSubtab(key){
   if(selected.key==="nps") phase568ObserveNPSLegacyTabs();
 }
 
-
-
-
 function phase543MFMemberSubtabHTML(fy,member){
   const members=["Rashi","Vijay","Sweta"];
   const canonical=phase543CanonicalMFMember(member);
@@ -9032,7 +9033,6 @@ function phase516TaxSubtab(key){
   c.appendChild(shell);
 }
 
-
 let phase517PositionTab="current";
 function phase517RetirementProjection(){
   // Retirement Projection uses the same authoritative current-corpus engine
@@ -9140,7 +9140,6 @@ function phase517PositionSubtab(key){
   ],key,"phase517PositionSubtab")+old;
 }
 
-
 let phase520ExpenseTab="summary";
 function phase520ExpenseCategoryKey(name){
   return "cat:"+String(name||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-");
@@ -9245,7 +9244,6 @@ function phase520ExpenseSubtab(key){
   const tabs=phase516MakeSubtabs("Expenses",unique,selected.key,"phase520ExpenseSubtab");
   document.getElementById("content").innerHTML=tabs+body;
 }
-
 
 let phase522ReportTab="fy";
 function phase633FullCalculationReconciliation(fy){
@@ -9575,7 +9573,6 @@ function phase621PasteInterest54(event,id,startIdx){
   ncdRestoreScroll54(scroll);
 }
 
-
 /* ==================== LIFE-LONG FY CARRY-FORWARD FOUNDATION ====================
    FY opening balances are stored per FY. The first/legacy FY keeps the
    existing manually entered opening balance. Every later FY automatically
@@ -9885,8 +9882,6 @@ phase621RestoreNCDUI(phase621NcdExpanded);
  console.error(err);
 }}
 
-
-
 function phase59ReinvestFD(sourceId){
   ensureFDLedger54();
   const src=d.fdLedger54.find(x=>String(x.id)===String(sourceId));
@@ -10037,8 +10032,6 @@ function phase633CleanupAltGraffPlanPlaceholders(){
   d.altGraffPlanPlaceholderCleanup633=true;
   save();
 }
-
-
 
 function phase57AltGraffInitCycleFields(x){
   // Preserve legacy actual-investment amounts while moving to the cycle/source model.
@@ -10344,7 +10337,6 @@ function phase57AltGraffMembers(){
   return ["Vijay","Sweta","Rashi"];
 }
 
-
 function phase57AltGraffMarkMatured(id,checked){
   ensureAltGraffLedger57();
   const x=d.altGraffLedger57.find(r=>String(r.id)===String(id));
@@ -10437,7 +10429,7 @@ function altGraffMemberInvestmentCard(fy,member){
     </div>
 
     ${phase57AltGraffFundingPanel(fy,mem)}
-    <div class="altGraffMemberTrackingNote">Actual AltGraff investment is cycle-based. <b>Choose the money you actually use on the investment date.</b> Salary and matured money can remain available until you use them. <b>Total Invest = Salary Used + Reinvestment Used + Additional.</b></div>
+    
     <div style="overflow:auto;margin-top:8px">
       <table class="compact mfLedgerFinal altGraffMemberTrackingTable altGraffCycleTable">
         <thead><tr>
@@ -10484,11 +10476,9 @@ function phase57AltGraffCard(){
   return phase57AltGraffMemberSubtabHTML(fy,phase57AltGraffCanonicalMember(phase57AltGraffActiveMember));
 }
 
-
 function phase57AltGraffFYSummary(){
   return "";
 }
-
 
 /* ==================== FD LEDGER — PHASE 1 ==================== */
 function ensureFDLedger58(){
@@ -10828,7 +10818,6 @@ function fdFYInterestSplit58(x,fy){
   return {current,expected:Math.max(0,total-current)};
 }
 
-
 function fdFYInterest58(x){
   const start=fdDate58(x.valueDate);
   const end=(String(x.status||"").toLowerCase()==="premature")
@@ -11030,7 +11019,7 @@ function fdMemberLedger58(fy,member){
   const fdReconcileDiff=fdLedgerPrincipal-fdSummaryCorpus;
 
   return `<div class="card fdMemberCard">
-    <div class="notice" style="display:block!important;margin:8px 0"><b>Summary reconciliation:</b> Active FD principal ₹${fmt(fdLedgerPrincipal)} vs Financial Position ₹${fmt(fdSummaryCorpus)} — <b>${Math.abs(fdReconcileDiff)<0.5?"OK":"CHECK"}</b>. Interest is separate.</div>
+    
     <div class="fdLedgerCompactHeader">
       <div><h2>FD Ledger — ${esc(mem)}</h2><span>Member-wise Fixed Deposit lifecycle • <b>Maturity / Pre-mature closure automatically credits Cash / Bank</b></span></div>
       <div class="fdLedgerCompactKpis">
@@ -11454,9 +11443,6 @@ function phase57CashBankPosition(fy){
   </div>`;
 }
 
-
-
-
 function phase631TaxPaidForFY(fy){
   const y=normalizeFYStart(fy);
   if(y===null) return {has:false,value:0};
@@ -11680,7 +11666,7 @@ function phase631CTCCorpusTable(currentFY){
   filteredRows.sort((a,b)=>a.y-b.y);
 
   return `<div class="card phase631-ctc-corpus-card">
-    <h2>Cumulative CTC Earned vs Corpus — FY-wise</h2>
+<h2>Cumulative CTC Earned vs Corpus — FY-wise</h2>
     <div class="notice">Historical FYs use the maintained <b>Total Salary Income / CTC</b>. <b>FY 2026-27 is always shown</b> and uses the live Salary Distribution data. Where salary or corpus data is unavailable, the table shows <b>—</b> rather than carrying forward or estimating a value.</div>
     <div style="overflow:auto"><table>
       <thead><tr><th>FY</th><th>FY CTC Earned</th><th>Cumulative CTC Earned</th><th>FY-end Investment Corpus</th><th>Corpus / Cumulative Salary Income</th><th>Tax Paid (till Salary Executed)</th><th>Tax Paid %</th></tr></thead>
@@ -11834,8 +11820,6 @@ function phase513Dashboard(fy){
 
   document.getElementById("content").innerHTML=`
   <div class="card">
-    <h2>Dashboard — ${esc(fy||"")}</h2>
-    <div class="notice">Consolidated view of the working modules. Investment corpus uses current active cycles only; matured/reinvested FD, NCD and AltGraff cycles are not double-counted. Cash/Bank uses actual In-Hand salary, actual expenses and Vijay/My Salary-funded investments. <b>April salary is carried into May opening and is not counted twice.</b></div>
     <div class="grid">
       <div class="stat"><small>Current Investment Corpus</small><b>₹${fmt(investmentCorpus)}</b></div>
       <div class="stat"><small>Investment Interest</small><b>₹${fmt(itrInterest)}</b></div>
@@ -11861,7 +11845,12 @@ function phase514UpdateSalaryPlan(fy,monthIndex,key,val){
   phase514EnsurePlanningRows(fy);
   const row=d.salaryPlans.find(x=>x.fy===fy&&Number(x.monthIndex)===Number(monthIndex));
   if(!row)return;
-  if(["employeePF","professionalTax","otherDeduction","overrideTDS"].includes(key))
+  if(key==="professionalTax"){
+    d.taxSettings.professionalTaxMonthly=Math.max(0,Number(val)||0);
+    (d.salaryPlans||[]).filter(x=>x.fy===fy).forEach(x=>{x.professionalTax=d.taxSettings.professionalTaxMonthly;});
+    save();render();return;
+  }
+  if(["employeePF","otherDeduction","overrideTDS"].includes(key))
     row[key]=(val===""||val==null)?(key==="overrideTDS"?null:0):Math.max(0,Number(val)||0);
   else row[key]=val;
   save();render();
@@ -12234,8 +12223,6 @@ function mfNormalizePlanningRows(fy){
   return false;
 }
 
-
-
 /* ==================== PHASE 6.37 — DETERMINISTIC FY PLANNING TEMPLATE SYNC ====================
    A new FY receives an independent copy of the immediately preceding FY plan.
    Once the user edits that FY, it is never overwritten automatically.
@@ -12409,9 +12396,7 @@ function phase526PlanningSubtab(key){
       <b>Planning Member:</b>
       ${phase526FundingMembers().map(m=>`<button type="button" class="btn ${m===selectedFundingMember?"primary":"secondary"}" onclick="phase526SelectFundingMember('${esc(m)}')">${esc(m)}</button>`).join("")}
     </div>
-    <div class="notice" style="display:block!important;margin-top:10px">
-      <b>${esc(selectedFundingMember)} tab:</b> All amounts planned in this tab are funded from <b>${esc(selectedFundingMember)}'s income/funds</b>. The <b>Member</b> column identifies whose investment ledger receives the money. There is <b>no separate Source column</b>.
-    </div>
+    
   </div>`;
 
   const invRows=inv.map(g=>{
@@ -12536,7 +12521,6 @@ function phase514Planning(fy){
     <div class="notice"><b>Planning is the source/input module.</b> Salary Planning is maintained under Income. Investment and Expense plans do not have a manual Executed checkbox. When the corresponding month is marked <b>Salary Received</b> in Income, the planned Investment/Expense rows for that month are automatically posted to execution. If the actual amount differs or the planned item was not actually executed, correct it in the relevant Actual/Execution ledger.</div>
   </div>
 
-
   <div class="card">
     <h2>1. Investment Planning</h2>
     <p><button type="button" class="small" onclick="phase514AddInvestmentPlan('${esc(fy)}','May')">+ Add Investment Plan</button>
@@ -12569,7 +12553,6 @@ function phase514Planning(fy){
     </tbody></table></div>
   </div>`;
 }
-
 
 /* ==================== PHASE 7.00 — INTERACTIVE DASHBOARD (charts + filters) ====================
    Self-contained SVG chart helpers (no external library) plus a rebuilt Dashboard page.
@@ -12713,6 +12696,161 @@ function phase700LineChart(categories,series,opts){
   </svg>`;
 }
 
+/* ==================== ALLOCATION GUIDANCE ====================
+   User-editable FY targets with automatic guidance. This module is isolated
+   from all existing financial calculations and uses the authoritative
+   investment-corpus rows already used by the Dashboard.
+*/
+const VMG_ALLOC_ASSETS=[
+  {key:"PPF",label:"PPF",control:"user"},
+  {key:"EPF / EPS",label:"EPF / EPS",control:"employer"},
+  {key:"FD",label:"FD",control:"user"},
+  {key:"Mutual Fund",label:"Mutual Fund",control:"user"},
+  {key:"Superannuation",label:"Superannuation",control:"employer"},
+  {key:"AltGraff",label:"AltGraff",control:"user"},
+  {key:"NCD",label:"NCD",control:"user"},
+  {key:"NPS",label:"NPS",control:"limited"},
+  {key:"LIC",label:"LIC",control:"user"},
+  {key:"NSC",label:"NSC",control:"user"},
+  {key:"APY",label:"APY",control:"user"},
+  {key:"Other",label:"Other",control:"user"}
+];
+const VMG_ALLOC_DEFAULTS={
+  "PPF":20,"EPF / EPS":25,"FD":15,"Mutual Fund":15,"Superannuation":6,
+  "AltGraff":4,"NCD":5,"NPS":8,"LIC":2,"NSC":0,"APY":0,"Other":0
+};
+function phaseAllocFYStart(fy){
+  const m=String(fy||"").match(/(\d{4})/);
+  return m?Number(m[1]):null;
+}
+function phaseAllocRetirementFYStart(){
+  const dor=String(d.leaveGratuity?.dor||"");
+  const m=dor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return 2035;
+  const y=Number(m[1]),mo=Number(m[2]);
+  return mo>=4?y:y-1;
+}
+function phaseAllocIsPostRetirement(fy){
+  const y=phaseAllocFYStart(fy),r=phaseAllocRetirementFYStart();
+  return y!=null && y>r;
+}
+function phaseAllocDefaultForFY(fy){
+  const y=phaseAllocFYStart(fy);
+  if(y==null)return {...VMG_ALLOC_DEFAULTS};
+  const path={
+    2026:{PPF:20,"EPF / EPS":25,FD:15,"Mutual Fund":15,Superannuation:6,AltGraff:4,NCD:5,NPS:8,LIC:2,NSC:0,APY:0,Other:0},
+    2027:{PPF:17,"EPF / EPS":25,FD:17,"Mutual Fund":17,Superannuation:6,AltGraff:3,NCD:4,NPS:9,LIC:2,NSC:0,APY:0,Other:0},
+    2028:{PPF:14,"EPF / EPS":24,FD:19,"Mutual Fund":20,Superannuation:6,AltGraff:2,NCD:3,NPS:10,LIC:2,NSC:0,APY:0,Other:0},
+    2029:{PPF:12,"EPF / EPS":23,FD:20,"Mutual Fund":22,Superannuation:6,AltGraff:1,NCD:3,NPS:11,LIC:2,NSC:0,APY:0,Other:0},
+    2030:{PPF:10,"EPF / EPS":22,FD:22,"Mutual Fund":24,Superannuation:6,AltGraff:1,NCD:2,NPS:11,LIC:2,NSC:0,APY:0,Other:0},
+    2031:{PPF:8,"EPF / EPS":21,FD:24,"Mutual Fund":26,Superannuation:6,AltGraff:1,NCD:2,NPS:11,LIC:2,NSC:0,APY:0,Other:0},
+    2032:{PPF:7,"EPF / EPS":20,FD:25,"Mutual Fund":27,Superannuation:6,AltGraff:1,NCD:2,NPS:11,LIC:1,NSC:0,APY:0,Other:0},
+    2033:{PPF:6,"EPF / EPS":20,FD:26,"Mutual Fund":28,Superannuation:6,AltGraff:0,NCD:2,NPS:10,LIC:1,NSC:0,APY:0,Other:0},
+    2034:{PPF:5,"EPF / EPS":19,FD:27,"Mutual Fund":29,Superannuation:6,AltGraff:0,NCD:2,NPS:9,LIC:1,NSC:0,APY:0,Other:0},
+    2035:{PPF:5,"EPF / EPS":19,FD:28,"Mutual Fund":29,Superannuation:7,AltGraff:0,NCD:2,NPS:8,LIC:1,NSC:0,APY:0,Other:0}
+  };
+  return {...(path[y]||VMG_ALLOC_DEFAULTS)};
+}
+function phaseAllocPostRetirementDefaults(){
+  return {PPF:5,"EPF / EPS":18,FD:30,"Mutual Fund":25,Superannuation:7,AltGraff:0,NCD:2,NPS:10,LIC:1,NSC:0,APY:0,Other:2};
+}
+function phaseAllocEnsure(){
+  if(!d.allocationTargets || typeof d.allocationTargets!=="object" || Array.isArray(d.allocationTargets)) d.allocationTargets={};
+  if(!d.allocationTargets.fy || typeof d.allocationTargets.fy!=="object") d.allocationTargets.fy={};
+  if(!d.allocationTargets.postRetirement || typeof d.allocationTargets.postRetirement!=="object") d.allocationTargets.postRetirement=phaseAllocPostRetirementDefaults();
+  (d.financialYears||[]).forEach(x=>{
+    const fy=x?.label; if(!fy)return;
+    if(!d.allocationTargets.fy[fy]) d.allocationTargets.fy[fy]=phaseAllocDefaultForFY(fy);
+    VMG_ALLOC_ASSETS.forEach(a=>{
+      if(!Object.prototype.hasOwnProperty.call(d.allocationTargets.fy[fy],a.key)) d.allocationTargets.fy[fy][a.key]=0;
+      d.allocationTargets.fy[fy][a.key]=Math.max(0,Math.min(100,Number(d.allocationTargets.fy[fy][a.key])||0));
+    });
+  });
+}
+function phaseAllocTargetStore(fy){
+  phaseAllocEnsure();
+  if(phaseAllocIsPostRetirement(fy)) return d.allocationTargets.postRetirement;
+  const key=String(fy||"");
+  if(!d.allocationTargets.fy[key]) d.allocationTargets.fy[key]=phaseAllocDefaultForFY(key);
+  const store=d.allocationTargets.fy[key];
+  VMG_ALLOC_ASSETS.forEach(a=>{
+    if(!Object.prototype.hasOwnProperty.call(store,a.key)) store[a.key]=0;
+  });
+  return store;
+}
+function phaseAllocSetTarget(fy,key,value){
+  phaseAllocEnsure();
+  const store=phaseAllocTargetStore(fy);
+  const old=Number(store[key])||0;
+  const next=Number(value);
+  if(!Number.isFinite(next)||next<0||next>100){
+    render();
+    alert("Target must be between 0% and 100%. The previous value has been retained.");
+    return;
+  }
+  const others=Object.keys(store).filter(k=>k!==key).reduce((sum,k)=>sum+(Number(store[k])||0),0);
+  if(others+next>100+1e-9){
+    render();
+    alert("Target allocation cannot exceed 100%. Maximum permissible target for "+key+" is "+Math.max(0,100-others).toFixed(1)+"%.");
+    return;
+  }
+  store[key]=Math.round(next*10)/10;
+  save();
+}
+function phaseAllocCurrentMap(){
+  const rows=phase580InvestmentSubledgerRows();
+  const total=rows.reduce((sum,x)=>sum+(Number(x.corpus)||0),0);
+  const map={};
+  rows.forEach(x=>{map[x.ledger]=(map[x.ledger]||0)+(Number(x.corpus)||0)});
+  return {total,map};
+}
+function phaseAllocGuidance(fy){
+  phaseAllocEnsure();
+  const {total,map}=phaseAllocCurrentMap();
+  const targets=phaseAllocTargetStore(fy);
+  const rows=VMG_ALLOC_ASSETS.map(a=>{
+    const corpus=Number(map[a.key])||0;
+    const current=total>0?corpus/total*100:0;
+    const target=Number(targets[a.key])||0;
+    let kind="neutral",label="→ Neutral";
+    if(a.control==="employer"){kind="auto";label="AUTO";}
+    else if(current < target-1){kind="up";label="↑ Increase";}
+    else if(current > target+1){kind="down";label="↓ Reduce";}
+    return {...a,corpus,current,target,kind,label};
+  });
+  const targetTotal=rows.reduce((sum,r)=>sum+r.target,0);
+  return {total,rows,targetTotal,post:phaseAllocIsPostRetirement(fy)};
+}
+function phaseAllocActionSummary(rows){
+  const up=rows.filter(r=>r.kind==="up").map(r=>r.key);
+  const down=rows.filter(r=>r.kind==="down").map(r=>r.key);
+  const neutral=rows.filter(r=>r.kind==="neutral").map(r=>r.key);
+  const auto=rows.filter(r=>r.kind==="auto").map(r=>r.key);
+  const chip=(cls,title,arr)=>arr.length?`<span class="vmg-alloc-action ${cls}"><b>${title}:</b> ${arr.map(esc).join(", ")}</span>`:"";
+  return chip("up","↑ Increase",up)+chip("down","↓ Reduce new allocation",down)+chip("","→ Maintain",neutral)+chip("auto","🔵 AUTO",auto);
+}
+function phase700AllocationGuidance(fy){
+  const g=phaseAllocGuidance(fy);
+  const title=g.post?"Post-Retirement":(fy||"");
+  const totalClass=Math.abs(g.targetTotal-100)<0.05?"good":g.targetTotal<100?"partial":"bad";
+  const totalText=Math.abs(g.targetTotal-100)<0.05?"🟢 100% Allocated":`🟡 ${g.targetTotal.toFixed(1)}% / 100% — ${(100-g.targetTotal).toFixed(1)}% Unallocated`;
+  const rows=g.rows.map(r=>`<tr>
+    <td><b>${esc(r.key)}</b></td>
+    <td style="text-align:center">${r.control==="employer"?"🔒 Employer":r.control==="limited"?"Limited / User":"User"}</td>
+    <td>${fmt(r.current)}%</td>
+    <td><input class="vmg-target-input" type="number" min="0" max="100" step="0.1" value="${r.target.toFixed(1).replace(/\.0$/,'')}" onchange="phaseAllocSetTarget('${esc(fy)}','${esc(r.key)}',this.value)" aria-label="${esc(r.key)} target percentage"></td>
+    <td><span class="vmg-alloc-guidance vmg-alloc-${r.kind}">${r.label}</span></td>
+  </tr>`).join("");
+  return `<div class="card vmg-allocation-card">
+    <h2>🎯 Allocation Guidance — ${esc(title)}</h2>
+    <div class="notice">Target % is your editable planning assumption. Guidance is automatic from current active corpus vs target. <b>↓ means reduce new allocation, not sell existing holdings.</b> Employer-controlled EPF / EPS and Superannuation are shown as AUTO.</div>
+    <div style="overflow:auto"><table class="vmg-alloc-table"><thead><tr><th>Asset</th><th>Control</th><th>Current %</th><th>Target %</th><th>Guidance</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="vmg-alloc-total ${totalClass}"><span><b>Target Total:</b> ${g.targetTotal.toFixed(1)}% / 100%</span><span>${totalText}</span></div>
+    <div class="vmg-alloc-actions">${phaseAllocActionSummary(g.rows)}</div>
+    <div class="vmg-alloc-note">Current % uses the existing authoritative investment-corpus engine for all members. Target values are stored separately for each FY; post-retirement has its own target set. Target total can be below 100%, but can never be saved above 100%.</div>
+  </div>`;
+}
+
 function phase700Dashboard(fy){
   ensurePPFLedger54(); ensureEPFLedger54(); ensureNPSLedger54(); ensureSuperLedger54();
   ensureAltGraffLedger57(); ensureExpenseLedger57();
@@ -12794,8 +12932,6 @@ function phase700Dashboard(fy){
 
   document.getElementById("content").innerHTML=`
   <div class="card">
-    <h2>Dashboard — ${esc(fy||"")}</h2>
-    <div class="notice">Consolidated view of the working modules. Investment corpus uses current active cycles only; matured/reinvested FD, NCD and AltGraff cycles are not double-counted. Cash/Bank uses actual salary, expenses and external investments. <b>April salary is carried into May opening and is not counted twice.</b></div>
     <div class="p700-stats" style="margin-top:12px">
       <div class="p700-stat"><small>Current Investment Corpus</small><b>₹${fmt(investmentCorpus)}</b></div>
       <div class="p700-stat"><small>Investment Interest</small><b>₹${fmt(itrInterest)}</b></div>
@@ -12813,8 +12949,7 @@ function phase700Dashboard(fy){
 
   <div class="p700-row">
     <div class="card p700-chartcard">
-      <h3>Monthly Cash Flow — ${esc(fy||"")} <span class="p700-tag">Salary vs Investment vs Expense</span></h3>
-      <div class="notice" style="margin:6px 0 8px">Investment and Expense percentages shown above each bar are calculated as <b>% of Salary Received</b> for that month.</div>
+      <h3>Monthly Cash Flow — ${esc(fy||"")}</h3>
       ${cashRows.length?`<div class="p700-bar-wrap">${phase700GroupedBar(cashFlowCats,cashFlowSeries)}</div>
       <div class="p700-legend">${cashFlowSeries.map(s=>`<div class="li"><span class="sw" style="background:${s.color}"></span>${esc(s.name)}</div>`).join("")}</div>
       <div class="p700-overall-ratios" style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:10px 12px;border-top:1px solid #e5e7eb;font-size:13px">
@@ -12841,17 +12976,13 @@ function phase700Dashboard(fy){
     </div>
   </div>
 
-  <div class="card p700-chartcard" style="margin-top:15px">
-    <h3>Investment Corpus Trend Across Financial Years <span class="p700-tag">All members</span></h3>
-    ${trendCats.length>=2?phase700LineChart(trendCats,[{name:"Corpus",color:"#2563eb",data:trendVals}]):`<div class="p700-empty">Corpus trend needs at least two financial years with data to plot.</div>`}
-  </div>
-
   <div class="card">
     <h2>Current Investment Corpus — Asset-wise${selMember!=="All"?" ("+esc(selMember)+")":""}</h2>
     <div style="overflow:auto"><table><thead><tr><th>Asset</th><th>Current Corpus</th><th>%</th></tr></thead><tbody>
       ${assetEntries.map(([a,v])=>`<tr><td>${esc(a)}</td><td>₹${fmt(v)}</td><td>${filteredCorpus?fmt(v/filteredCorpus*100):"0"}%</td></tr>`).join("")||'<tr><td colspan="3" class="empty">No recorded investment corpus yet.</td></tr>'}
     </tbody></table></div>
   </div>
+  ${phase700AllocationGuidance(fy)}
   ${phase631CTCCorpusTable(fy)}
 `;
 }
@@ -13003,23 +13134,23 @@ function phase630MainLedgersCard(){
     <td><span class="phase630-action"><button type="button" class="btn secondary" onclick="phase630OpenLedger('${esc(String(ledger.id))}')">Open</button><button type="button" class="btn secondary" onclick="phase630RenameLedger('${esc(String(ledger.id))}')">Edit / Rename</button>${ledger.protected?'<span class="phase630-protected">Protected</span>':'<button type="button" class="phase630-created" onclick="phase630DeleteLedger(\''+esc(String(ledger.id))+`\')">Delete</button>`}</span></td>
   </tr>`).join("");
   return `<div class="card">
-    <h2>0.3 Investment Types / Main Ledgers</h2>
+    <h2>Investment Types / Main Ledgers</h2>
     <div class="phase630-header-actions"><button type="button" class="btn primary" onclick="phase630CreateMainLedger()">＋ Create Main Ledger / Investment Type</button></div>
-    <p class="phase630-note">This master-only configuration controls which member ledgers are available for each main investment type. Existing financial data and specialised ledgers are not migrated, recalculated, renamed, or deleted by this section.</p>
+    
     <div class="phase630-master-ledger-wrap"><table class="phase630-master-ledger"><thead><tr><th>Main Ledger / Investment Type</th>${members.map(m=>`<th>${esc(m)}</th>`).join("")}<th>Add Member</th><th>Template</th><th>Master Action</th></tr></thead><tbody>${rows||'<tr><td colspan=99 class="empty">No main ledgers created.</td></tr>'}</tbody></table></div>
   </div>`;
 }
 
 function master(){
 let rows=d.financialYears.map(f=>`<tr><td>${esc(f.label)}</td><td>${f.startDate} – ${f.endDate}</td><td><span class="badge ${f.status==="Active"?"active":"future"}">${f.status}</span></td><td>${esc(f.previousFY||"—")}</td><td><button class="btn danger" onclick="delFY('${f.id}')">− Delete</button></td></tr>`).join("");
-document.getElementById("content").innerHTML=`<div class="card"><h2>0.1 Financial Years</h2><div class="notice">Financial Year is <b>1 April to 31 March</b>. Create FYs with +. Actual transactions are <b>never copied</b> into a new FY. For a new FY, opening balances are carried forward automatically from the previous FY closing balance; you may reconcile/override an opening balance when an actual statement differs.</div><p><button class="btn primary" onclick="addFY()">＋ Create FY</button></p><div style="overflow:auto"><table><tr><th>FY</th><th>Period</th><th>Status</th><th>Previous FY</th><th>Action</th></tr>${rows||'<tr><td colspan="5" class="empty">No FY created. Click ＋ Create FY.</td></tr>'}</table></div></div>
-${masterBlock("0.2 Members","members","Member","addMember","delMember")}
+document.getElementById("content").innerHTML=`<div class="card"><h2>Financial Years</h2><div class="notice">Financial Year is <b>1 April to 31 March</b>. Create FYs with +. Actual transactions are <b>never copied</b> into a new FY. For a new FY, opening balances are carried forward automatically from the previous FY closing balance; you may reconcile/override an opening balance when an actual statement differs.</div><p><button class="btn primary" onclick="addFY()">＋ Create FY</button></p><div style="overflow:auto"><table><tr><th>FY</th><th>Period</th><th>Status</th><th>Previous FY</th><th>Action</th></tr>${rows||'<tr><td colspan="5" class="empty">No FY created. Click ＋ Create FY.</td></tr>'}</table></div></div>
+${masterBlock("Members","members","Member","addMember","delMember")}
 ${phase630MainLedgersCard()}
-${masterBlock("0.4 Institutions","institutions","Institution","addInstitution","delInstitution")}
-${masterBlock("0.5 Investment Types","investmentTypes","Investment Type","addInvestmentType","delInvestmentType")}
-${masterBlock("0.6 Expense Categories","expenseCategories","Expense Category","addExpenseCategory","delExpenseCategory")}
-${masterBlock("0.7 Payment Modes","paymentModes","Payment Mode","addPaymentMode","delPaymentMode")}
-<div class="card"><h2>0.3 CTC History</h2><div class="notice">CTC History will be activated in Phase 5.2. Approved components: Basic, HRA, Employer PF, Superannuation, Conveyance and Other.</div></div>`}
+${masterBlock("Institutions","institutions","Institution","addInstitution","delInstitution")}
+${masterBlock("Investment Types","investmentTypes","Investment Type","addInvestmentType","delInvestmentType")}
+${masterBlock("Expense Categories","expenseCategories","Expense Category","addExpenseCategory","delExpenseCategory")}
+${masterBlock("Payment Modes","paymentModes","Payment Mode","addPaymentMode","delPaymentMode")}
+`}
 function masterBlock(head,key,label,add,del){
 let rows=d[key].map(x=>`<tr><td>${esc(x.name)}</td><td>${x.active?'<span class="badge active">Active</span>':'<span class="badge">Inactive</span>'}</td><td><button class="btn secondary" onclick="toggle('${key}','${x.id}')">${x.active?"Deactivate":"Activate"}</button> <button class="btn danger" onclick="${del}('${x.id}')">− Delete</button></td></tr>`).join("");
 return `<div class="card"><h2>${head}</h2><button class="btn primary" onclick="${add}()">＋ Add</button><div style="overflow:auto;margin-top:10px"><table><tr><th>${label}</th><th>Status</th><th>Action</th></tr>${rows}</table></div></div>`;
@@ -13098,23 +13229,81 @@ function salaryRows(fy){
     if(!p){
       p={id:"sp"+Date.now()+i,fy,monthIndex:i,
          employeePF:Math.round(m.employerPF),
-         professionalTax:money(d.taxSettings.professionalTaxMonthly || 200),
+         professionalTax:professionalTaxMonthlyLinked(fy),
          otherDeduction:0,actualInHand:null,received:false,overrideTDS:null};
       d.salaryPlans.push(p);
     } else if(p.employeePF===0 && m.employerPF>0){
       // Employee PF follows the monthly Employer PF planning by default.
       p.employeePF=Math.round(m.employerPF);
     }
-    // Professional Tax is fixed at ₹200/month by default.
-    if(p.professionalTax===0 || p.professionalTax==null){
-      p.professionalTax=200;
-    }
+    // Professional Tax is sourced from Tax Settings rate history.
+    // Monthly Salary Distribution receives the rate applicable to this month.
+    p.professionalTax=professionalTaxForSalaryMonth(fy,i);
     const gross=m.total;
     const taxable=gross-m.employerPF-m.super;
     arr.push({i,month,p,gross,taxable,other:0});
   }
   return arr;
 }
+
+function fyStartYear(fy){
+  const m=String(fy||'').match(/(20\d{2})/);
+  return m?Number(m[1]):new Date().getFullYear();
+}
+function professionalTaxRateHistory(){
+  const a=d.taxSettings?.professionalTaxRates;
+  if(Array.isArray(a)&&a.length) return a.slice().filter(x=>x&&x.effectiveFrom).sort((a,b)=>String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)));
+  const v=Number(d.taxSettings?.professionalTaxMonthly);
+  return [{effectiveFrom:'2026-04',monthly:Number.isFinite(v)&&v>=0?v:200}];
+}
+function professionalTaxRateForMonth(year,monthIndex){
+  const key=String(year).padStart(4,'0')+'-'+String(monthIndex+1).padStart(2,'0');
+  const h=professionalTaxRateHistory();
+  let rate=Number(h[0]?.monthly)||0;
+  h.forEach(x=>{if(String(x.effectiveFrom)<=key) rate=Math.max(0,Number(x.monthly)||0);});
+  return rate;
+}
+function professionalTaxForSalaryMonth(fy,monthIndex){
+  const year=fyStartYear(fy)+(monthIndex>=9?1:0);
+  const month=(monthIndex+3)%12;
+  return professionalTaxRateForMonth(year,month);
+}
+function professionalTaxMonthlyLinked(fy){
+  const year=fyStartYear(fy);
+  return professionalTaxRateForMonth(year,3);
+}
+function professionalTaxFYTotal(fy){
+  let total=0;
+  for(let i=0;i<12;i++) total+=professionalTaxForSalaryMonth(fy,i);
+  return total;
+}
+function professionalTaxLatestConfig(fy){
+  const h=professionalTaxRateHistory();
+  const fyStart=fyStartYear(fy);
+  const fyEnd=fyStart+1;
+  const inFY=h.filter(x=>String(x.effectiveFrom)>=`${fyStart}-04`&&String(x.effectiveFrom)<=`${fyEnd}-03`);
+  const x=(inFY.length?inFY:h).slice(-1)[0];
+  return x||{effectiveFrom:`${fyStart}-04`,monthly:professionalTaxMonthlyLinked(fy)};
+}
+function setProfessionalTaxSource(val){
+  const v=Math.max(0,Number(val)||0);
+  const effective=(document.getElementById('ptaxEffectiveFrom')?.value)||(`${fyStartYear(d.selectedFY)}-04`);
+  // The selected effective date becomes the new source point.
+  // Remove this date and all later rate changes so reverting to an earlier
+  // source date also removes a previously-entered future change.
+  d.taxSettings.professionalTaxRates=professionalTaxRateHistory().filter(x=>String(x.effectiveFrom)<effective);
+  d.taxSettings.professionalTaxRates.push({effectiveFrom:effective,monthly:v});
+  d.taxSettings.professionalTaxMonthly=v;
+  salaryRows(d.selectedFY);
+  (d.salaryPlans||[]).filter(x=>x.fy===d.selectedFY).forEach(x=>x.professionalTax=professionalTaxForSalaryMonth(d.selectedFY,Number(x.monthIndex)||0));
+  save();
+  render();
+}
+function setProfessionalTaxEffectiveFrom(val){
+  const rate=Math.max(0,Number(document.getElementById('ptax')?.value)||0);
+  setProfessionalTaxSource(rate);
+}
+
 function otherIncomeForFY(fy){return d.otherIncome.filter(x=>x.fy===fy)}
 function leavePlanDefaults(){
   return [
@@ -13404,7 +13593,7 @@ function salaryTable(fy){
     NCD/FD/savings interest is maintained separately for ITR/tax records.
   </div>
   <div style="overflow:auto;margin-top:12px"><table><thead><tr>
-  <th>Month</th><th>Monthly CTC</th><th>Taxable Salary</th><th>Employee PF<br><small>(auto = Employer PF)</small></th><th>TDS</th><th>Professional Tax<br><small>(auto ₹200)</small></th><th>Other Deduction</th><th>In-Hand</th><th>Salary Received</th>
+  <th>Month</th><th>Monthly CTC</th><th>Taxable Salary</th><th>Employee PF<br><small>(auto = Employer PF)</small></th><th>TDS</th><th>Professional Tax<br><small>(auto from Tax Settings)</small></th><th>Other Deduction</th><th>In-Hand</th><th>Salary Received</th>
   </tr></thead><tbody>${rows.map(x=>{
     const p=x.p;
     const future=futureByMonth[x.month]||{gross:0,taxable:0};
@@ -13433,7 +13622,7 @@ function salaryTable(fy){
       <td><b>₹${fmt(displayTaxable)}</b></td>
       <td><input type="number" min="0" value="${money(p.employeePF)}" style="width:105px" onchange="updSalary('${p.id}','employeePF',this.value)"></td>
       <td><input type="number" min="0" value="${p.overrideTDS==null?"":Math.round(p.overrideTDS)}" placeholder="${Math.round(tds)}" style="width:105px" onchange="updSalary('${p.id}','overrideTDS',this.value)" title="Blank = automatic TDS"></td>
-      <td><input type="number" min="0" value="${money(p.professionalTax)}" style="width:105px" onchange="updSalary('${p.id}','professionalTax',this.value)"></td>
+      <td><input type="number" min="0" value="${money(professionalTax)}" style="width:105px;background:#e5e7eb!important;color:#374151!important;border-color:#d1d5db!important;box-sizing:border-box" readonly title="Linked from Tax Settings — Professional Tax rate applicable to this month"></td>
       <td><input type="number" min="0" value="${money(p.otherDeduction)}" style="width:105px" onchange="updSalary('${p.id}','otherDeduction',this.value)"></td>
       <td><b>₹${fmt(inhand)}</b><br><small style="color:#6b7280">Salary + Future Income − PF − TDS − PT − Other</small></td>
       <td><span class="${p.received?"vmg-inner-grey":""}"><input type="checkbox" ${p.received?"checked":""} onchange="toggleSalary('${p.id}',this.checked)"></span></td>
@@ -13681,7 +13870,6 @@ function applyHike(fy,prev){
  save();render();
 }
 
-
 function phase53ReviewCard(fy){
   const c=getCTC(fy)||{};
   const annual=Number(c.finalCTC||c.manualFinalCTC||0)||0;
@@ -13692,8 +13880,8 @@ function phase53ReviewCard(fy){
   const prev=prevRow ? (Number(prevRow.baseCTC)||0) : (Number(c.previousCTC)||0);
   const hike=prev>0 ? ((annual-prev)/prev*100) : 0;
   return `<div class="card">
-    <h2>Phase 5.3 — Salary & CTC Review</h2>
-    <div class="notice">Audit view only. This section does not alter the existing salary, TDS, or in-hand calculations.</div>
+    <h2>Salary & CTC Review</h2>
+    
     <div class="grid">
       <div><label>Previous / Final CTC</label><input value="${money(prev)}" readonly></div>
       <div><label>Manual / Final CTC</label><input value="${money(annual)}" readonly></div>
@@ -13730,19 +13918,16 @@ window.renderIncomePageFull=function(){
  <div class="actions" style="margin:10px 0"><button class="btn primary" onclick="addOtherIncome()">＋ Add Other Taxable Income</button></div>
  <div style="overflow:auto"><table><tr><th>Expected Month</th><th>Description</th><th>Leave Days</th><th>Gross</th><th>Taxable</th><th>Additional TDS</th><th>Received</th><th>Action</th></tr>
  ${otherIncomeForFY(fy).map(x=>`<tr><td>${esc(x.expectedMonth||x.date||"")}</td><td>${esc(x.description)}</td><td>${x.leaveDays==null?"—":fmt(Math.abs(Number(x.leaveDays)||0))}</td><td>₹${fmt(x.gross)}</td><td>₹${fmt(x.taxable)}</td><td>₹${fmt(x.tds||0)}</td><td><input type="checkbox" ${x.received?"checked":""} onchange="otherReceived('${x.id}',this.checked)"></td><td><button class="btn danger" onclick="delOther('${x.id}')">− Delete</button></td></tr>`).join("")||'<tr><td colspan="8" class="empty">No other taxable income entered.</td></tr>'}</table></div></div>
- <div class="card"><h2>NCD Interest — Taxable Income Summary</h2>
-  <div class="notice">NCD interest is maintained from the fixed payment schedule for member-wise tax/ITR records. It is NOT added to employer salary TDS. The NCD principal itself is not treated as taxable income.</div>
-  <div class="grid">
-   <div class="stat"><small>FY NCD Interest</small><b>₹${fmt(phase54NCDTaxableInterestFY(fy))}</b></div>
-   <div class="stat"><small>Included in Employer TDS</small><b>No</b></div>
-  </div>
+ 
  </div>
  <div class="card"><h2>Tax Settings — Editable Assumptions</h2>
- <div class="warn">Tax rates/slabs are stored as editable assumptions. Before relying on tax output for filing, verify the applicable FY tax rules. This phase does not replace your tax adviser or Form 16.</div>
+
  <div class="grid" style="margin-top:10px">
  <div><label style="font-size:12px;color:#6b7280">Standard Deduction</label><input type="number" id="stdDed" value="${money(d.taxSettings.standardDeduction)}" style="width:100%"></div>
  <div><label style="font-size:12px;color:#6b7280">Cess %</label><input type="number" id="cess" value="${money(d.taxSettings.cessRate)}" style="width:100%"></div>
- <div><label style="font-size:12px;color:#6b7280">Professional Tax / month</label><input type="number" id="ptax" value="${money(d.taxSettings.professionalTaxMonthly)}" style="width:100%"></div>
+ <div><label style="font-size:12px;color:#6b7280">Professional Tax / month — source</label><input type="number" id="ptax" min="0" value="${money(professionalTaxLatestConfig(d.selectedFY).monthly)}" style="width:100%;box-sizing:border-box" onchange="setProfessionalTaxSource(this.value)" title="Main Professional Tax source"></div>
+ <div><label style="font-size:12px;color:#6b7280">Effective From</label><input type="month" id="ptaxEffectiveFrom" value="${String(professionalTaxLatestConfig(d.selectedFY).effectiveFrom||(`${fyStartYear(d.selectedFY)}-04`))}" style="width:100%;box-sizing:border-box" onchange="setProfessionalTaxEffectiveFrom(this.value)" title="Month from which this PT rate applies"></div>
+ <div><label style="font-size:12px;color:#6b7280">Professional Tax / year</label><input type="number" value="${money(professionalTaxFYTotal(d.selectedFY))}" style="width:100%;box-sizing:border-box;background:#f3f4f6!important;color:#374151!important;border-color:#d1d5db!important" readonly title="Sum of the 12 monthly Professional Tax values"></div>
  </div>
  <h3>Tax Slabs</h3><table class="vmg-tax-table"><tr><th>Upper Limit</th><th>Rate %</th></tr>${d.taxSettings.slabs.map((s,i)=>`<tr><td class="amt"><input type="number" value="${s.upto==null?"":s.upto}" placeholder="No limit" onchange="updSlab(${i},'upto',this.value)"></td><td class="amt"><input type="number" value="${s.rate}" onchange="updSlab(${i},'rate',this.value)"></td></tr>`).join("")}</table>
  <p><button class="btn primary" onclick="saveTaxSettings()">💾 Save Tax Assumptions</button></p></div>`;
@@ -13842,9 +14027,26 @@ function addOtherIncome(){
 function otherReceived(id,v){let x=d.otherIncome.find(x=>x.id===id);if(x){x.received=v;saveDataNoToast();render()}}
 function delOther(id){if(confirm("Delete this other-income entry?")){d.otherIncome=d.otherIncome.filter(x=>x.id!==id);save();render()}}
 function updSlab(i,k,v){d.taxSettings.slabs[i][k]=(k==="rate"?money(v):(v===""?null:money(v)));saveDataNoToast()}
-function saveTaxSettings(){d.taxSettings.standardDeduction=money(document.getElementById("stdDed").value);d.taxSettings.cessRate=money(document.getElementById("cess").value);d.taxSettings.professionalTaxMonthly=money(document.getElementById("ptax").value);save();render()}
-function placeholder(){document.getElementById("content").innerHTML=`<div class="card"><h2>${titles[page]}</h2><div class="warn"><b>Later phase:</b> This module is intentionally not active yet. We are building the application phase-wise so each linkage can be tested before the next module is added.</div></div>`}
-function guide(){document.getElementById("content").innerHTML=`<div class="card"><h2>Operating Guide — Phase 5.1</h2><div class="notice"><b>Start here:</b> Master → Financial Years → ＋ Create FY.</div><h3>Create a FY</h3><p>Enter only the starting year. Example: 2026 creates FY 2026-27, from 01 April 2026 to 31 March 2027. A new FY does not copy transactions. Its opening balance is carried automatically from the previous FY closing balance and can be reconciled if required.</p><h3>Add master items</h3><p>Use + Add for members, institutions, investment types, expense categories and payment modes.</p><h3>Active / Inactive</h3><p>Use Deactivate rather than deleting something that may later be referenced by historical records.</p><h3>Save and Backup</h3><p>Save stores the working data in this browser. Backup creates a JSON file. Restore loads a previous JSON backup.</p><div class="notice"><b>Phase 5.25 — Data Safety:</b> Use Backup after each major data-entry stage. The JSON backup contains your working financial data, selected FY and backup metadata. Restore replaces the current browser data only after confirmation.</div><h3>Important</h3><p>This is only Phase 5.1. Do not enter salary, investment or expense data yet. Those functions will be added and tested in later phases.</p></div>`}
+function saveTaxSettings(){
+ d.taxSettings.standardDeduction=money(document.getElementById("stdDed").value);
+ d.taxSettings.cessRate=money(document.getElementById("cess").value);
+ const ptSource=document.getElementById("ptax");
+ const ptEffective=document.getElementById("ptaxEffectiveFrom");
+ if(ptSource){
+   const rate=Math.max(0,money(ptSource.value));
+   const effective=ptEffective?.value||(`${fyStartYear(d.selectedFY)}-04`);
+   // The selected effective date is the new source point; discard any
+   // later scheduled change so a revert to an earlier date is complete.
+   d.taxSettings.professionalTaxRates=professionalTaxRateHistory().filter(x=>String(x.effectiveFrom)<effective);
+   d.taxSettings.professionalTaxRates.push({effectiveFrom:effective,monthly:rate});
+   d.taxSettings.professionalTaxMonthly=rate;
+ }
+ salaryRows(d.selectedFY);
+ (d.salaryPlans||[]).filter(x=>x.fy===d.selectedFY).forEach(x=>x.professionalTax=professionalTaxForSalaryMonth(d.selectedFY,Number(x.monthIndex)||0));
+ save();render();
+}
+function placeholder(){document.getElementById("content").innerHTML=`<div class="card"><h2>${titles[page]}</h2></div>`}
+function guide(){document.getElementById("content").innerHTML=`<div class="card"><h2>Operating Guide</h2><div class="notice"><b>Start here:</b> Master → Financial Years → ＋ Create FY.</div><h3>Create a FY</h3><p>Enter only the starting year. Example: 2026 creates FY 2026-27, from 01 April 2026 to 31 March 2027. A new FY does not copy transactions. Its opening balance is carried automatically from the previous FY closing balance and can be reconciled if required.</p><h3>Add master items</h3><p>Use + Add for members, institutions, investment types, expense categories and payment modes.</p><h3>Active / Inactive</h3><p>Use Deactivate rather than deleting something that may later be referenced by historical records.</p><h3>Save and Backup</h3><p>Save stores the working data in this browser. Backup creates a JSON file. Restore loads a previous JSON backup.</p><div class="notice"><b>Data Safety:</b> Use Backup after each major data-entry stage. The JSON backup contains your working financial data, selected FY and backup metadata. Restore replaces the current browser data only after confirmation.</div><h3>Important</h3><p>Use the relevant modules to enter and review your financial data. Keep regular backups before major changes.</p></div>`}
 document.querySelectorAll(".menu button").forEach(b=>b.onclick=()=>{page=b.dataset.p;document.getElementById("side").classList.remove("open");render()});
 document.getElementById("fy").onchange=e=>{
   d.selectedFY=e.target.value;
@@ -13930,9 +14132,7 @@ function phase525RestoreBackup(file){
 }
 document.getElementById("backup").onclick=phase525DownloadBackup;
 document.getElementById("restore").onchange=e=>{const f=e.target.files[0];phase525RestoreBackup(f);e.target.value=""};
-/* Phase 6.30 — Human-readable Excel Export / Import.
-   Offline Excel 2003 XML (.xls), with complete VMG JSON for round-trip restore
-   plus readable data sheets and a formula/linkage documentation sheet. */
+
 function phase630XmlEsc(v){
   return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
 }
@@ -14232,11 +14432,6 @@ document.querySelectorAll(".menu button").forEach(function(btn){
   });
 });
 
-/* Phase 6.28 — robust startup
-   The Dashboard is the default view. Initialise it only after the DOM is
-   ready, and do not depend on the browser's handling of a local-file timer.
-   The existing render() function remains the single application renderer.
-*/
 function phase628StartApp(){
   try{
     phase598CleanMFPlanning();
@@ -14281,7 +14476,6 @@ function phase628StartApp(){
     content.innerHTML=`<div class="card"><h2>Dashboard</h2><div class="warn"><b>Startup error:</b> ${esc(err.message||String(err))}<br><small>Use the Dashboard button once to retry.</small></div></div>`;
   }
 }
-
 
 /* ==================== PHASE 6.31 — UNIFIED INVESTMENT RECONCILIATION ====================
    Single calculation source for Financial Position / Investment Summary.
@@ -14517,12 +14711,6 @@ function phase56FinancialPosition(){
   ${phase631InvestmentReconciliationCard(rows)}`;
 }
 
-/*
-  Phase 6.28 FINAL STARTUP FIX
-  Always initialise the application after the complete HTML document has
-  loaded. This is especially important when the file is opened directly
-  from the local filesystem (file://). The Dashboard is the first page.
-*/
 function phase628Boot(){
   try{
     page="dashboard";
@@ -14556,7 +14744,6 @@ function phase628Boot(){
     if(c)c.innerHTML=`<div class="card"><h2>Dashboard</h2><div class="warn"><b>Startup error:</b> ${esc(err.message||String(err))}</div></div>`;
   }
 }
-
 
 /* ==================== PHASE 6.33 — MF LEGACY OPENING PRIORITY ====================
    Existing MF opening values entered in the original member-wise ledger are
@@ -14709,7 +14896,6 @@ function phase633RepairCurrentFY(){
   }catch(e){console.warn('Life-long planning repair:',e);}
 }
 
-// Phase 6.28.1 — do not depend on the browser's "load" event firing.
 // This file has no external resources (no images/CSS/JS files), and in
 // some viewers (mobile file-preview apps, certain in-app/webview
 // browsers) the "load" event is unreliable or never fires for a fully
@@ -15245,8 +15431,6 @@ function phaseLoanRender(){
 }
 /* ==================== END LOAN MODULE ==================== */
 
-
-
 /* ===== PHASE 632 FD LIFECYCLE SAFETY / EVENT HELPERS ===== */
 function phase632FDLifecycleEvent(row){
   if(!row)return null;
@@ -15417,9 +15601,6 @@ function phase631StatusClass(type,row,fy,month){
   return '';
 }
 
-
-/* Phase 700 — Universal keyboard navigation + Excel paste
-   Applies to editable ledger controls without changing calculation logic. */
 (function phase700UniversalGridEditing(){
   function editable(el){
     if(!el || el.disabled || el.readOnly) return false;
@@ -15868,7 +16049,6 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 </script>
 
-
 <script id="vmg-gis-on-demand-helper">
 /* If an existing Google Drive handler calls this helper, GIS is loaded only then.
    This is intentionally additive and does not alter financial logic. */
@@ -15876,7 +16056,6 @@ window.VMG_ensureGoogleGIS = window.VMG_loadGoogleGIS || function(){
   return Promise.resolve();
 };
 </script>
-
 
 <style id="vmg-mobile-v9-final-geometry">
 /* V9: final mobile geometry for the actual investment allocation table.
@@ -15966,7 +16145,6 @@ window.VMG_ensureGoogleGIS = window.VMG_loadGoogleGIS || function(){
   table.horizontalPlan.planAligned.plan-investment th.plan-month{width:60px!important;min-width:60px!important;max-width:60px!important}
 }
 </style>
-
 
 <style id="vmg-mobile-v15-common-grid-final">
 /*
@@ -16122,4 +16300,15 @@ window.VMG_ensureGoogleGIS = window.VMG_loadGoogleGIS || function(){
 }
 </style>
 
+<script>
+/* VMG: mouse-wheel protection for numeric inputs.
+   A wheel/scroll over a focused number field scrolls the page instead of changing the value. */
+document.addEventListener('wheel', function(e){
+  var el=e.target && e.target.closest ? e.target.closest('input[type="number"]') : null;
+  if(!el || document.activeElement !== el) return;
+  e.preventDefault();
+  el.blur();
+  window.scrollBy(0, e.deltaY);
+}, {passive:false});
+</script>
 </body></html>
