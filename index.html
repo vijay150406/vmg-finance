@@ -13643,16 +13643,20 @@ function phase700ITRInterestByMember(fy){
   // FD uses the same FY label/key as the FD ledger (FY-26-27 style).
   const totalBy={Vijay:0,Sweta:0,Rashi:0};
   const itrBy={Vijay:0,Sweta:0,Rashi:0};
+  const expectedItrBy={Vijay:0,Sweta:0,Rashi:0};
   try{
     const rows=phase592InterestSummary(fy);
     rows.forEach(x=>{
       if(String(x.ledger||"").trim().toUpperCase()==="FD") return;
       const m=mfNormalizeMember(x.member||"Vijay");
-      if(totalBy[m]===undefined){totalBy[m]=0;itrBy[m]=0;}
+      if(totalBy[m]===undefined){totalBy[m]=0;itrBy[m]=0;expectedItrBy[m]=0;}
       const amount=Math.max(0,Number(x.interest)||0);
       totalBy[m]+=amount;
       const key=phase592InterestSummaryKey(fy,x.member,x.ledger);
-      if(phase592ITRChecked(key)) itrBy[m]+=amount;
+      if(phase592ITRChecked(key)) {
+        itrBy[m]+=amount;
+        expectedItrBy[m]+=amount;
+      }
     });
 
     // Convert the Income-tab FY label to the FD ledger's FY-YY-YY format.
@@ -13666,7 +13670,7 @@ function phase700ITRInterestByMember(fy){
     ensureFDLedger58();
     (d.fdLedger58||[]).forEach(fd=>{
       const m=mfNormalizeMember(fd.member||"Vijay");
-      if(totalBy[m]===undefined){totalBy[m]=0;itrBy[m]=0;}
+      if(totalBy[m]===undefined){totalBy[m]=0;itrBy[m]=0;expectedItrBy[m]=0;}
       // Only current/accrued FY interest belongs in FY total received/accrued.
       // Future expected interest is NOT included.
       const split=fdFYInterestSplit58(fd,fdFY);
@@ -13676,15 +13680,50 @@ function phase700ITRInterestByMember(fy){
 
       // FD ITR selection is stored per FD + FY. Use the FD-formatted FY key.
       const fdITRKey=phase592ITRKey("FD",fd.id,fdFY);
-      if(phase592ITRChecked(fdITRKey))itrBy[m]+=fyInterest;
+      if(phase592ITRChecked(fdITRKey)){
+        itrBy[m]+=fyInterest;
+        expectedItrBy[m]+=Math.max(0,Number((fdFYInterest58(fd)||{})[fdFY])||0);
+      }
     });
   }catch(e){
     console.error("Member-wise total/ITR interest summary:",e);
   }
-  Object.keys(totalBy).forEach(k=>{totalBy[k]=Number(totalBy[k])||0;itrBy[k]=Number(itrBy[k])||0;});
+  Object.keys(totalBy).forEach(k=>{totalBy[k]=Number(totalBy[k])||0;itrBy[k]=Number(itrBy[k])||0;expectedItrBy[k]=Number(expectedItrBy[k])||0;});
   const total=Object.values(totalBy).reduce((a,b)=>a+b,0);
   const itrTotal=Object.values(itrBy).reduce((a,b)=>a+b,0);
-  return {totalBy,itrBy,total,itrTotal};
+  const expectedItrTotal=Object.values(expectedItrBy).reduce((a,b)=>a+b,0);
+
+  // Full-FY expected interest = current/accrued + remaining expected interest.
+  // Use the same authoritative interest summary / FD FY-interest engine already
+  // used elsewhere in VMG; do not create a second interest calculation.
+  const expectedBy={Vijay:0,Sweta:0,Rashi:0};
+  try{
+    phase592InterestSummary(fy).forEach(x=>{
+      const m=mfNormalizeMember(x.member||"Vijay");
+      if(expectedBy[m]===undefined)expectedBy[m]=0;
+      expectedBy[m]+=Math.max(0,Number(x.currentInterest)||0)+Math.max(0,Number(x.expectedInterest)||0);
+    });
+
+    // FD summary rows above are excluded from phase592InterestSummary aggregation
+    // at the member-card level, so add the full FY FD interest once.
+    ensureFDLedger58();
+    const fdFY=(()=>{
+      const z=String(fy||"").match(/(?:FY\s*[-]?)?(\d{2,4})\s*[-–]\s*(\d{2,4})/i);
+      if(!z)return String(fy||"");
+      const y=Number(z[1])<100?2000+Number(z[1]):Number(z[1]);
+      return `FY-${String(y).slice(-2)}-${String(y+1).slice(-2)}`;
+    })();
+    (d.fdLedger58||[]).forEach(fd=>{
+      const m=mfNormalizeMember(fd.member||"Vijay");
+      if(expectedBy[m]===undefined)expectedBy[m]=0;
+      expectedBy[m]+=Math.max(0,Number((fdFYInterest58(fd)||{})[fdFY])||0);
+    });
+  }catch(e){
+    console.error("Expected FY interest summary:",e);
+  }
+  Object.keys(expectedBy).forEach(k=>{expectedBy[k]=Number(expectedBy[k])||0;});
+  const expectedTotal=Object.values(expectedBy).reduce((a,b)=>a+b,0);
+  return {totalBy,itrBy,expectedBy,expectedItrBy,total,itrTotal,expectedTotal,expectedItrTotal};
 }
 function phase700IncomeSummaryCards(fy){
   if(!fy)return "";
@@ -13720,10 +13759,10 @@ function phase700IncomeSummaryCards(fy){
     <h2>Interest — Member-wise</h2>
     <div class="notice">Black = <b>Total Interest received / accrued for the FY</b>. Red = <b>ITR amount to be considered for taxable income</b>, which is only a subset of the member's total and is not added again.</div>
     <div class="grid" style="margin-top:8px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Vijay</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Vijay||0)}</b><span style="display:block;margin-top:3px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Vijay||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Sweta</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Sweta||0)}</b><span style="display:block;margin-top:3px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Sweta||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Rashi</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Rashi||0)}</b><span style="display:block;margin-top:3px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Rashi||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Total Interest</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.total)}</b><span style="display:block;margin-top:3px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrTotal)}</span></div>
+      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Vijay</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Vijay||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Vijay||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Vijay||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Vijay||0)}</span></div>
+      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Sweta</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Sweta||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Sweta||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Sweta||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Sweta||0)}</span></div>
+      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Rashi</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Rashi||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Rashi||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Rashi||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Rashi||0)}</span></div>
+      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Total Interest</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.total)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedTotal||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrTotal)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrTotal||0)}</span></div>
     </div>
   </div>`;
 }
@@ -14423,7 +14462,11 @@ if(document.getElementById("vmgUndoBtn"))document.getElementById("vmgUndoBtn").o
 if(document.getElementById("vmgRedoBtn"))document.getElementById("vmgRedoBtn").onclick=()=>vmgRedo();
 vmgHistoryUpdateUi();
 if(document.getElementById("excelImport"))document.getElementById("excelImport").onchange=e=>{const f=e.target.files[0];phase630ImportExcel(f);e.target.value=""};
-document.getElementById("menubtn").onclick=()=>document.getElementById("side").classList.toggle("open");
+document.getElementById("menubtn").onclick=(e)=>{e.stopPropagation();document.getElementById("side").classList.toggle("open")};
+document.addEventListener("click",e=>{
+  const side=document.getElementById("side"), menu=document.getElementById("menubtn");
+  if(side && side.classList.contains("open") && !side.contains(e.target) && e.target!==menu){ side.classList.remove("open"); }
+});
 document.querySelectorAll(".menu button").forEach(function(btn){
   btn.addEventListener("click",function(){
     page=this.getAttribute("data-p");
