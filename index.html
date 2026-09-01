@@ -5161,6 +5161,8 @@ function save(){
     if(!json||json.length<20||!Array.isArray(d.financialYears)){
       throw new Error("Refused to save: data looks incomplete or corrupted.");
     }
+    /* VMG AUTO-SYNC PATCH: every completed edit gets a fresh timestamp. */
+    d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||"").slice(0,60)};
     localStorage.setItem(KEY,json);
     msg("Data saved in this browser.");
   }catch(e){
@@ -17929,20 +17931,27 @@ async function vmgDriveUpload(){
   vmgDriveBusy=true;vmgDrivePending=false;vmgDriveUpdateUi();
   try{
     const id=await vmgDriveFindOrCreateFile();
-    d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||"").slice(0,60)};
+    /* VMG AUTO-SYNC PATCH: always check the shared Drive copy before upload. */
+    let remote=null;
+    try{remote=await vmgDriveDownload();}catch(e){console.warn("Drive pre-upload check failed; retrying:",e);}
+    const localTime=d&&d._sync&&d._sync.updatedAt?new Date(d._sync.updatedAt).getTime():0;
+    const remoteTime=remote&&remote._sync&&remote._sync.updatedAt?new Date(remote._sync.updatedAt).getTime():0;
+    if(remote&&Array.isArray(remote.financialYears)&&remoteTime>localTime){
+      vmgAutoBackupCurrent("Auto-sync: replaced by newer Google Drive data");
+      d=remote;localStorage.setItem(KEY,JSON.stringify(d));
+      const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";
+      render();vmgDriveLastSync=Date.now();msg("Auto-synced newer data from Google Drive.");return;
+    }
+    if(remote&&Array.isArray(remote.financialYears)&&remoteTime===localTime){
+      vmgDriveLastSync=Date.now();msg("Already synced — no data changed.");return;
+    }
+    if(!d._sync||!d._sync.updatedAt)d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||"").slice(0,60)};
     localStorage.setItem(KEY,JSON.stringify(d));
-    const res=await vmgDriveApi("https://www.googleapis.com/upload/drive/v3/files/"+id+"?uploadType=media",{
-      method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)
-    });
+    const res=await vmgDriveApi("https://www.googleapis.com/upload/drive/v3/files/"+id+"?uploadType=media",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)});
     if(!res.ok)throw new Error("Drive upload failed ("+res.status+")");
-    vmgDriveLastSync=Date.now();
-    msg("Synced to Google Drive.");
-  }catch(e){
-    console.error("Drive sync:",e);vmgDrivePending=true;msg("Drive sync failed — will retry.");
-  }finally{
-    vmgDriveBusy=false;vmgDriveUpdateUi();
-    if(vmgDrivePending&&navigator.onLine){vmgDrivePending=false;vmgDriveUpload();}
-  }
+    vmgDriveLastSync=Date.now();msg("Auto-synced this device to Google Drive.");
+  }catch(e){console.error("Drive sync:",e);vmgDrivePending=true;msg("Drive sync failed — will retry.");}
+  finally{vmgDriveBusy=false;vmgDriveUpdateUi();if(vmgDrivePending&&navigator.onLine){vmgDrivePending=false;setTimeout(()=>vmgDriveUpload(),1000);}}
 }
 function vmgDriveScheduleSync(){
   try{
@@ -18031,44 +18040,22 @@ function vmgShowSyncConflictModal(remote,localTime,remoteTime){
 }
 
 async function vmgDriveInitialSync(){
+  if(window.__VMG_DRIVE_INITIAL_SYNC_BUSY)return;
+  window.__VMG_DRIVE_INITIAL_SYNC_BUSY=true;
   try{
     const st=document.getElementById("driveStatus");if(st)st.textContent="Checking Drive…";
     const remote=await vmgDriveDownload();
     if(remote&&Array.isArray(remote.financialYears)){
       const remoteTime=remote._sync&&remote._sync.updatedAt?new Date(remote._sync.updatedAt).getTime():0;
-      const localTime=d._sync&&d._sync.updatedAt?new Date(d._sync.updatedAt).getTime():0;
-      const localHasData=(d.financialYears||[]).length>0;
-      if(!localHasData){
-        d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
-        msg("Loaded your data from Google Drive.");
-      }else if(remoteTime>localTime){
-        /* Drive is newer by ANY amount — always ask, never guess. The old
-           +2000ms grace window let a genuinely newer Drive copy (e.g. an
-           edit made seconds ago on another device) get silently overwritten
-           by this device's older data below. That silent path is gone. */
-        const choice=await vmgShowSyncConflictModal(remote,localTime,remoteTime);
-        if(choice==="remote"){
-          vmgAutoBackupCurrent("Replaced by Google Drive version on "+new Date().toLocaleString());
-          d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
-          msg("Loaded the Google Drive version. Your previous data was auto-backed-up on this device.");
-        }else{
-          await vmgDriveUpload();
-          msg("Kept this device's data and pushed it to Google Drive.");
-        }
-      }else if(remoteTime<localTime){
-        /* This device is genuinely newer — safe to push without asking. */
-        await vmgDriveUpload();
-      }
-      /* remoteTime===localTime: already in sync, nothing to do. */
-    }else{
-      await vmgDriveUpload();
-    }
+      const localTime=d&&d._sync&&d._sync.updatedAt?new Date(d._sync.updatedAt).getTime():0;
+      if(!(d.financialYears||[]).length){d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();msg("Auto-synced data from Google Drive.");}
+      else if(remoteTime>localTime){vmgAutoBackupCurrent("Auto-sync: Google Drive was newer");d=remote;localStorage.setItem(KEY,JSON.stringify(d));const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";render();msg("Auto-synced newer data from Google Drive.");}
+      else if(localTime>remoteTime){await vmgDriveUpload();}
+      else msg("Already synced — no data changed.");
+    }else await vmgDriveUpload();
     vmgDriveLastSync=Date.now();
-  }catch(e){
-    console.error("Drive initial sync:",e);msg("Could not reach Google Drive: "+e.message);
-  }finally{
-    vmgDriveUpdateUi();
-  }
+  }catch(e){console.error("Drive initial sync:",e);msg("Could not reach Google Drive: "+e.message);}
+  finally{window.__VMG_DRIVE_INITIAL_SYNC_BUSY=false;vmgDriveUpdateUi();}
 }
 function vmgDriveButtonClick(){
   if(!vmgDriveConfigured()){alert("Google Drive sync isn't set up in this file yet.\n\nSee SYNC-SETUP.md for the one-time setup (create a free Google OAuth Client ID and paste it into DRIVE_CLIENT_ID near the bottom of this file).");return;}
@@ -20565,6 +20552,7 @@ document.addEventListener('wheel', function(e){
   }
 })();
 </script>
+<!-- VMG PATCH: timestamp-based automatic two-way Drive sync; financial calculations untouched. -->
 <script id="vmg-final-auto-two-way-sync">
 /* VMG FINAL — AUTO TWO-WAY SYNC PATCH
    Financial/business logic is untouched. This only makes completed user edits
