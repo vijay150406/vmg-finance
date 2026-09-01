@@ -24,6 +24,7 @@ if(typeof window.structuredClone!=="function"){
 <!-- VMG PATCH V1.2: MF Planned uses authoritative Planning rows; system-executed cells are locked/grey. Baseline remains unchanged. -->
 <!-- VMG PATCH v3: LIC selected-FY Summary uses FY opening balance with strict carry-forward; actual interest first. -->
 <!-- VMG PATCH v5: LIC table fits full available width; only FY-table ROI % remains editable. -->
+<!-- VMG PATCH FINAL-SYNC: timestamp-before-serialize + first-connection Drive-master adoption + local-file guard. Financial calculations/data structure unchanged. -->
 <title>VMG Personal Financial Manager</title>
 <link rel="icon" href="./icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -5157,12 +5158,18 @@ function vmgHistoryUpdateUi(){
 })();
 function save(){
   try{
-    const json=JSON.stringify(d);
-    if(!json||json.length<20||!Array.isArray(d.financialYears)){
+    if(!d||!Array.isArray(d.financialYears)){
       throw new Error("Refused to save: data looks incomplete or corrupted.");
     }
-    /* VMG AUTO-SYNC PATCH: every completed edit gets a fresh timestamp. */
+    /* VMG AUTO-SYNC FINAL FIX: stamp FIRST, then serialize.
+       The previous order stamped d._sync after JSON.stringify(d), so the
+       timestamp written to localStorage was one edit behind. That could make
+       local and Drive copies appear newer/older incorrectly. */
     d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||"").slice(0,60)};
+    const json=JSON.stringify(d);
+    if(!json||json.length<20){
+      throw new Error("Refused to save: data looks incomplete or corrupted.");
+    }
     localStorage.setItem(KEY,json);
     msg("Data saved in this browser.");
   }catch(e){
@@ -18039,7 +18046,7 @@ function vmgShowSyncConflictModal(remote,localTime,remoteTime){
   });
 }
 
-async function vmgDriveInitialSync(){
+async function vmgDriveInitialSync(firstConnection=false){
   if(window.__VMG_DRIVE_INITIAL_SYNC_BUSY)return;
   window.__VMG_DRIVE_INITIAL_SYNC_BUSY=true;
   try{
@@ -18048,22 +18055,58 @@ async function vmgDriveInitialSync(){
     if(remote&&Array.isArray(remote.financialYears)){
       const remoteTime=remote._sync&&remote._sync.updatedAt?new Date(remote._sync.updatedAt).getTime():0;
       const localTime=d&&d._sync&&d._sync.updatedAt?new Date(d._sync.updatedAt).getTime():0;
-      if(!(d.financialYears||[]).length){d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();msg("Auto-synced data from Google Drive.");}
-      else if(remoteTime>localTime){vmgAutoBackupCurrent("Auto-sync: Google Drive was newer");d=remote;localStorage.setItem(KEY,JSON.stringify(d));const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";render();msg("Auto-synced newer data from Google Drive.");}
-      else if(localTime>remoteTime){await vmgDriveUpload();}
-      else msg("Already synced — no data changed.");
-    }else await vmgDriveUpload();
+      const localHasData=Array.isArray(d.financialYears)&&d.financialYears.length>0;
+
+      /* FIRST-CONNECTION RULE: when this browser has never connected to Drive
+         before, Drive is the shared master. This is specifically for bringing
+         an existing local copy onto the same data as the already-established
+         GitHub/Drive copy. The current local data is auto-backed-up first. */
+      if(firstConnection&&localHasData){
+        vmgAutoBackupCurrent("First Google Drive connection: local data preserved before adopting Drive master");
+        d=remote;
+        d._sync={updatedAt:(remote._sync&&remote._sync.updatedAt)||new Date().toISOString(),device:(remote._sync&&remote._sync.device)||"Google Drive"};
+        localStorage.setItem(KEY,JSON.stringify(d));
+        const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";
+        render();
+        vmgDriveLastSync=Date.now();
+        msg("Loaded the Google Drive master data. Local data was backed up first.");
+        return;
+      }
+
+      if(!localHasData){
+        d=remote;localStorage.setItem(KEY,JSON.stringify(d));render();
+        msg("Loaded your data from Google Drive.");
+      }else if(remoteTime>localTime){
+        vmgAutoBackupCurrent("Auto-sync: Google Drive was newer");
+        d=remote;localStorage.setItem(KEY,JSON.stringify(d));
+        const fy=document.getElementById("fy");if(fy)fy.value=d.selectedFY||"";
+        render();
+        msg("Auto-synced newer data from Google Drive.");
+      }else if(localTime>remoteTime){
+        await vmgDriveUpload();
+      }else{
+        msg("Already synced — no data changed.");
+      }
+    }else{
+      await vmgDriveUpload();
+    }
     vmgDriveLastSync=Date.now();
   }catch(e){console.error("Drive initial sync:",e);msg("Could not reach Google Drive: "+e.message);}
   finally{window.__VMG_DRIVE_INITIAL_SYNC_BUSY=false;vmgDriveUpdateUi();}
 }
+
 function vmgDriveButtonClick(){
+  if(vmgDriveIsLocalFile()){
+    alert("Google Drive sync needs VMG to run from a web origin. This copy is currently opened directly as a file (file://).\n\nFor local PC use, open VMG through localhost, for example: http://localhost:8080/index.html\n\nYour local financial data is not changed.");
+    return;
+  }
   if(!vmgDriveConfigured()){alert("Google Drive sync isn't set up in this file yet.\n\nSee SYNC-SETUP.md for the one-time setup (create a free Google OAuth Client ID and paste it into DRIVE_CLIENT_ID near the bottom of this file).");return;}
   /* Always check Drive for a newer copy first, even when already connected.
      Blindly pushing here (the old behavior) could overwrite a newer edit
      made on another device that this tab hasn't seen yet. */
-  if(vmgDriveToken){vmgDriveInitialSync();}
-  else{vmgDriveEnsureToken(true).then(vmgDriveInitialSync).catch(e=>{console.error(e);alert(e.message);});}
+  const wasConnected=localStorage.getItem(DRIVE_CONNECTED_KEY)==="1";
+  if(vmgDriveToken){vmgDriveInitialSync(!wasConnected);}
+  else{vmgDriveEnsureToken(true).then(()=>vmgDriveInitialSync(!wasConnected)).catch(e=>{console.error(e);alert(e.message);});}
 }
 (function vmgDriveBoot(){
   async function wire(){
