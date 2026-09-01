@@ -14869,11 +14869,33 @@ function phase700Dashboard(fy){
   const projection=phase700ProjectedInvestmentMap(fy,selMember);
   const filteredRows=projection.rows;
   const filteredCorpus=filteredRows.reduce((s,x)=>s+x.corpus,0);
-  const projectedTotal=projection.totalProjected;
+
+  /*
+   * Dashboard / Investment Summary reconciliation:
+   *
+   * Investment Summary is the authoritative current-corpus view for the
+   * selected FY.  In particular, LIC uses the FY opening/carry-forward
+   * balance there, whereas the projection engine also has a present-policy
+   * LIC principal path.  Using that present-policy value on the Dashboard
+   * can therefore make the Dashboard differ from the Summary.
+   *
+   * Keep the projection engine for interest/asset projections, but make the
+   * Dashboard Active Principal start from the exact same authoritative
+   * sub-ledger corpus used by Investment Summary.  This guarantees that FY
+   * 27-28 (and every later FY) cannot drift from the Summary because of LIC
+   * carry-forward treatment.
+   */
+  const dashboardAuthoritativeRows=phase580InvestmentSubledgerRows();
+  const dashboardAuthoritativeCorpus=dashboardAuthoritativeRows
+    .filter(x=>!selMember || String(selMember)==="All" || String(x.member||"").toLowerCase()===String(selMember).toLowerCase())
+    .reduce((s,x)=>s+(Number(x.corpus)||0),0);
+  const dashboardActivePrincipal=dashboardAuthoritativeCorpus;
+
   const projectedCurrentInterest=projection.totalCurrentInterest;
   // Match Investment Summary: Expected Interest is the remaining projected
   // LIC/investment interest for the selected FY.
   const projectedExpectedInterest=projection.totalExpectedInterest;
+  const projectedTotal=dashboardActivePrincipal+projectedCurrentInterest+projectedExpectedInterest;
 
   const byAsset={};
   filteredRows.forEach(x=>byAsset[x.ledger]=(byAsset[x.ledger]||0)+x.corpus);
@@ -14940,7 +14962,7 @@ function phase700Dashboard(fy){
   document.getElementById("content").innerHTML=`
   <div class="card">
     <div class="p700-stats" style="margin-top:12px">
-      <div class="p700-stat"><small>Active Principal</small><b>₹${fmt(projection.totalPrincipal)}</b></div>
+      <div class="p700-stat"><small>Active Principal</small><b>₹${fmt(dashboardActivePrincipal)}</b></div>
       <div class="p700-stat"><small>Current Interest</small><b>₹${fmt(projectedCurrentInterest)}</b></div>
       <div class="p700-stat"><small>Expected Interest</small><b>₹${fmt(projectedExpectedInterest)}</b></div>
       <div class="p700-stat"><small>Total Interest</small><b>₹${fmt(projectedCurrentInterest + projectedExpectedInterest)}</b></div>
@@ -20541,6 +20563,58 @@ document.addEventListener('wheel', function(e){
   }catch(e){
     console.error('VMG PATCH17 TRUE SUPER/APY ROLLOVER:',e);
   }
+})();
+</script>
+<script id="vmg-final-auto-two-way-sync">
+/* VMG FINAL — AUTO TWO-WAY SYNC PATCH
+   Financial/business logic is untouched. This only makes completed user edits
+   automatically commit locally and enter the existing Drive sync pipeline. */
+(function(){
+  let autoSaveTimer=null;
+  let autoSaveBusy=false;
+  const DEBOUNCE_MS=1500;
+  function isEditable(el){
+    if(!el || !el.matches) return false;
+    return el.matches('input,textarea,select,[contenteditable="true"]');
+  }
+  function schedule(){
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer=setTimeout(()=>{
+      if(autoSaveBusy)return;
+      try{
+        autoSaveBusy=true;
+        if(typeof save==='function') save();
+        else if(typeof d!=='undefined' && typeof KEY!=='undefined'){
+          localStorage.setItem(KEY,JSON.stringify(d));
+          if(typeof vmgDriveScheduleSync==='function') vmgDriveScheduleSync();
+        }
+      }catch(e){ console.error('VMG auto-save:',e); }
+      finally{ autoSaveBusy=false; }
+    },DEBOUNCE_MS);
+  }
+  document.addEventListener('input',e=>{ if(isEditable(e.target)) schedule(); },true);
+  document.addEventListener('change',e=>{ if(isEditable(e.target) && e.target.id!=='fy') schedule(); },true);
+  window.addEventListener('beforeunload',()=>{
+    if(autoSaveTimer){clearTimeout(autoSaveTimer);autoSaveTimer=null;}
+    try{
+      if(typeof d!=='undefined' && typeof KEY!=='undefined') localStorage.setItem(KEY,JSON.stringify(d));
+    }catch(e){}
+  });
+  /* Re-check the cloud shortly after returning to the app, while the existing
+     conflict-safe 30-second foreground polling remains the authoritative loop. */
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible' && navigator.onLine &&
+       typeof vmgDriveInitialSync==='function' &&
+       localStorage.getItem('VMG_DRIVE_CONNECTED')==='1'){
+      setTimeout(()=>{
+        try{
+          if(typeof vmgDriveEnsureToken==='function'){
+            vmgDriveEnsureToken(false).then(()=>vmgDriveInitialSync()).catch(()=>{});
+          }
+        }catch(e){}
+      },500);
+    }
+  });
 })();
 </script>
 </body></html>
