@@ -7695,7 +7695,7 @@ function phase592InterestSummary(fy,member){
   };
 
   try{
-    phase580InvestmentSubledgerRows(fy).forEach(x=>{
+    phase580InvestmentSubledgerRows().forEach(x=>{
       if(target && String(x.member||"").toLowerCase()!==target)return;
       const l=String(x.ledger||"");
       if(["FD","NCD","AltGraff"].includes(l))return;
@@ -9760,13 +9760,13 @@ function phase612FDMaturityByMember(){
   return out;
 }
 
-function phase580AuthoritativeSubledgerRows(fyOverride){
+function phase580AuthoritativeSubledgerRows(){
   const rows=[];
   const add=(member,ledger,account,corpus,interest)=>{
     const c=Number(corpus)||0;
     if(c>0)rows.push({member,ledger,account,corpus:c,interest:Math.max(0,Number(interest)||0)});
   };
-  const fy=fyOverride||d.selectedFY||getFY()?.label||"";
+  const fy=d.selectedFY||getFY()?.label||"";
   ensurePPFLedger54();ensureEPFLedger54();ensureNPSLedger54();ensureSuperLedger54();
   ensureAPYMemberLedgers();mfInit();ensureFDLedger58();ensureNCDLedger54();ensureAltGraffLedger57();phase534EnsureLedgers();
 
@@ -9929,11 +9929,7 @@ function phase580AuthoritativeSubledgerRows(fyOverride){
   Object.keys(agByMember).concat(
     Object.keys(agInterestByMember).filter(m=>!agByMember[m])
   ).forEach(mem=>{
-    const corpus=agByMember[mem]||0;
-    // IMPORTANT: Investment Summary normalizes AltGraff to interest realized
-    // in the selected FY. Use that exact same authority here so Dashboard
-    // Total Interest and Projected Corpus cannot diverge from Summary.
-    const interest=Math.max(0,Number(phase66AltGraffFYInterestByMember(fy,mem))||0);
+    const corpus=agByMember[mem]||0,interest=agInterestByMember[mem]||0;
     if(corpus>0||interest>0)
       add(mem,"AltGraff",agAccountByMember[mem]||("AltGraff - "+mem),corpus,interest);
   });
@@ -10077,7 +10073,7 @@ function renderInvestments54(fy){
     .map(x=>typeof x==="string"?{name:x,active:true}:x)
     .filter(x=>x && x.active!==false && x.name);
   // Current investment summary: active cycles only; reinvested historical cycles are excluded.
-  const rawSubledgerRows=phase580InvestmentSubledgerRows(fy);
+  const rawSubledgerRows=phase580InvestmentSubledgerRows();
 
   // Investment Summary is intentionally SUB-LEDGER wise, not transaction wise.
   // If the same Member + Investment Ledger + Sub-Ledger/Account occurs more
@@ -14766,10 +14762,7 @@ function phaseAllocSetTarget(fy,key,value){
   save();
 }
 function phase700ProjectedInvestmentMap(fy,member){
-  // Always resolve the projection against the FY explicitly supplied by the
-  // caller. This prevents the Dashboard from using a stale d.selectedFY
-  // during first-open/startup rendering or FY transitions.
-  const rows=phase580InvestmentSubledgerRows(fy);
+  const rows=phase580InvestmentSubledgerRows();
   const targetMember=member&&String(member)!=="All"?String(member).toLowerCase():null;
   const filtered=targetMember?rows.filter(r=>String(r.member||"").toLowerCase()===targetMember):rows;
   const principal={};
@@ -14877,7 +14870,7 @@ function phase700Dashboard(fy){
   const expenseRows=(d.expensePlans||[]).filter(x=>x&&x.fy===fy&&x.executed&&!String(x.id||"").startsWith("ex-"));
   const expenses=expenseRows.reduce((s,x)=>s+(Number(x.actualAmount===""||x.actualAmount==null?x.planned:x.actualAmount)||0),0);
 
-  const allRows=phase580InvestmentSubledgerRows(fy);
+  const allRows=phase580InvestmentSubledgerRows();
   const investmentCorpus=allRows.reduce((s,x)=>s+x.corpus,0);
 
   const members=phase526MasterSourceMembers();
@@ -14901,22 +14894,20 @@ function phase700Dashboard(fy){
    * 27-28 (and every later FY) cannot drift from the Summary because of LIC
    * carry-forward treatment.
    */
-  const dashboardAuthoritativeRows=phase580InvestmentSubledgerRows(fy);
+  const dashboardAuthoritativeRows=phase580InvestmentSubledgerRows();
   const dashboardAuthoritativeCorpus=dashboardAuthoritativeRows
     .filter(x=>!selMember || String(selMember)==="All" || String(x.member||"").toLowerCase()===String(selMember).toLowerCase())
     .reduce((s,x)=>s+(Number(x.corpus)||0),0);
   const dashboardActivePrincipal=dashboardAuthoritativeCorpus;
 
-  const projectedCurrentInterest=projection.totalCurrentInterest;
-  // Match Investment Summary exactly: Dashboard Total Interest must use the
-  // authoritative selected-FY sub-ledger interest total.  The current/expected
-  // split above remains available for the detailed Dashboard asset projection,
-  // but the KPI total must never be reconstructed by a second interest engine.
-  const projectedExpectedInterest=projection.totalExpectedInterest;
-  const authoritativeDashboardInterest=dashboardAuthoritativeRows
-    .filter(x=>!selMember || String(selMember)==="All" || String(x.member||"").toLowerCase()===String(selMember).toLowerCase())
-    .reduce((s,x)=>s+(Number(x.interest)||0),0);
-  const projectedTotal=dashboardActivePrincipal+authoritativeDashboardInterest;
+  // Interest Ledger is the single authoritative FY-interest source for the
+  // Dashboard. Current + Expected + Total are taken from the same detailed
+  // member/ledger rows shown in the Interest Ledger, preventing duplicate
+  // or alternate interest aggregation paths.
+  const interestAuthority=phase700InterestLedgerAuthority(fy);
+  const projectedCurrentInterest=interestAuthority.currentTotal;
+  const projectedExpectedInterest=interestAuthority.expectedTotal;
+  const projectedTotal=dashboardActivePrincipal+projectedCurrentInterest+projectedExpectedInterest;
 
   const byAsset={};
   filteredRows.forEach(x=>byAsset[x.ledger]=(byAsset[x.ledger]||0)+x.corpus);
@@ -14986,7 +14977,7 @@ function phase700Dashboard(fy){
       <div class="p700-stat"><small>Active Principal</small><b>₹${fmt(dashboardActivePrincipal)}</b></div>
       <div class="p700-stat"><small>Current Interest</small><b>₹${fmt(projectedCurrentInterest)}</b></div>
       <div class="p700-stat"><small>Expected Interest</small><b>₹${fmt(projectedExpectedInterest)}</b></div>
-      <div class="p700-stat"><small>Total Interest</small><b>₹${fmt(authoritativeDashboardInterest)}</b></div>
+      <div class="p700-stat"><small>Total Interest</small><b>₹${fmt(projectedCurrentInterest + projectedExpectedInterest)}</b></div>
       <div class="p700-stat"><small>Projected Corpus</small><b>₹${fmt(projectedTotal)}</b></div>
     </div>
   </div>
@@ -15761,31 +15752,17 @@ function phase700ITRInterestByMember(fy){
   // (and could double-count FD interest).
   const expectedBy={Vijay:0,Sweta:0,Rashi:0};
   try{
-    phase580InvestmentSubledgerRows(fy).forEach(x=>{
+    phase580InvestmentSubledgerRows().forEach(x=>{
       const m=mfNormalizeMember(x.member||"Vijay");
       if(expectedBy[m]===undefined)expectedBy[m]=0;
-
-      // Investment Summary applies one final reporting-only normalization to
-      // AltGraff: its Interest column is the interest realized in the selected
-      // FY (maturity/repayment FY), not the lifetime interest carried by the
-      // active cycle. Income must mirror that exact post-processing step.
-      const ledger=String(x.ledger||"").trim().toUpperCase();
-      const interest = ledger==="ALTGRAFF"
-        ? phase66AltGraffFYInterestByMember(fy,m)
-        : Math.max(0,Number(x.interest)||0);
-      expectedBy[m]+=Math.max(0,Number(interest)||0);
+      expectedBy[m]+=Math.max(0,Number(x.interest)||0);
     });
   }catch(e){
     console.error("Expected FY interest summary:",e);
   }
   Object.keys(expectedBy).forEach(k=>{expectedBy[k]=Number(expectedBy[k])||0;});
   const expectedTotal=Object.values(expectedBy).reduce((a,b)=>a+b,0);
-  // Reconcile member-wise Expected FY to the exact same authoritative rows
-  // used by Investment Summary. No financial calculation is changed here.
-  // The member values and total are therefore mathematically identical to
-  // phase580InvestmentSubledgerRows(fy).
-  const authoritativeExpectedTotal=expectedTotal;
-  return {totalBy,itrBy,expectedBy,expectedItrBy,total,itrTotal,expectedTotal:authoritativeExpectedTotal,expectedItrTotal};
+  return {totalBy,itrBy,expectedBy,expectedItrBy,total,itrTotal,expectedTotal,expectedItrTotal};
 }
 function phase700IncomeSummaryCards(fy){
   if(!fy)return "";
@@ -16413,13 +16390,9 @@ function phase631UnifiedInvestmentRows(fy){
 }
 
 // Keep the existing function name used by Financial Position and Investment Summary.
-function phase580InvestmentSubledgerRows(fyOverride){
-  // SINGLE FY-AWARE SOURCE OF TRUTH:
-  // Every screen that asks for investment corpus/interest for a FY must
-  // resolve that exact FY. When no override is supplied, retain the existing
-  // application behavior of using d.selectedFY. This is a reporting-source
-  // correction only; the underlying ledger calculations are unchanged.
-  return phase580AuthoritativeSubledgerRows(fyOverride);
+function phase580InvestmentSubledgerRows(){
+  // Investment Summary must use the same ledger-card calculation paths.
+  return phase580AuthoritativeSubledgerRows();
 }
 
 function phase631InvestmentReconciliationCard(rows){
@@ -17076,12 +17049,9 @@ mfLedgerCard=function(fy,member){
   return phase638OriginalMFLedgerCard(fy,m);
 };
 
-/* IMPORTANT: this file contains later authoritative calculation patches.
-   Do not boot synchronously here, because that would render the Dashboard
-   before those final patches are defined and could show a stale first-open FY.
-   DOMContentLoaded/load fire after the complete script has been parsed. */
-document.addEventListener("DOMContentLoaded",phase6281BootOnce,{once:true});
-window.addEventListener("load",phase6281BootOnce,{once:true});
+phase6281BootOnce();
+document.addEventListener("DOMContentLoaded",phase6281BootOnce);
+window.addEventListener("load",phase6281BootOnce);
 
 /* ==================== LOAN MODULE — MERGED FROM TESTED STANDALONE V7 ==================== */
 const phaseLoanBankSchedule = [
@@ -18845,79 +18815,32 @@ document.addEventListener('wheel', function(e){
   async function capturePage(host,key,label){
     page=key; render();
     await new Promise(r=>setTimeout(r,20));
-    const topButtons=Array.from(document.querySelectorAll('#content .subtabbar button'));
+    let buttons=Array.from(document.querySelectorAll('#content .subtabbar button'));
     const sec=addSection(host,label);
-
-    // Helper: capture the currently rendered content as a read-only print snapshot.
-    const appendSnapshot=(targetSec,subTitle)=>{
+    if(!buttons.length){
       const c=printableClone();
-      if(!c) return false;
-      const txt=escText(c.textContent||'').replace(/VMG Personal Financial Manager|Selected FY:|Printed:/gi,'').trim();
-      if(txt.length<25) return false;
-      const sub=document.createElement('div');
-      sub.style.breakInside='avoid'; sub.style.pageBreakInside='avoid';
-      if(subTitle){
-        const sh=document.createElement('h2');
-        sh.textContent=escText(subTitle); sh.style.fontSize='15px'; sh.style.margin='12px 0 6px';
-        sub.appendChild(sh);
+      // Do not create a separate PDF page for a parent section that contains
+      // only its title/empty shell. Real populated ledger/report pages remain
+      // printable exactly as before.
+      if(c){
+        const txt=escText(c.textContent||'');
+        const meaningful=txt.replace(/VMG Personal Financial Manager|Selected FY:|Printed:/gi,'').trim();
+        if(meaningful.length<25){sec.remove();return;}
+        sec.appendChild(c);
       }
-      sub.appendChild(c); targetSec.appendChild(sub);
-      return true;
-    };
-
-    if(!topButtons.length){
-      appendSnapshot(sec,'');
       return;
     }
-
-    // Capture every top-level sub-tab.
-    for(let i=0;i<topButtons.length;i++){
+    // Capture every visible sub-tab without changing financial data.
+    for(let i=0;i<buttons.length;i++){
       const fresh=Array.from(document.querySelectorAll('#content .subtabbar button'))[i];
       if(fresh){fresh.click();await new Promise(r=>setTimeout(r,10));}
-
-      // Some investment ledgers are themselves member-wise sub-ledgers.
-      // The normal screen shows only the active member, so the old PDF code
-      // printed only Vijay (the default member). Capture every nested member
-      // tab without changing any financial data.
-      const nestedSelectors=[
-        '.epfMemberTabs button',
-        '.ppfMemberTabs button',
-        '.superMemberTabs button',
-        '.interestMemberTabs button',
-        '.npsMemberTabs button',
-        '.mfMemberTabs button',
-        '.licMemberTabs button',
-        '.ncdMemberTabs button',
-        '.altgraffMemberTabs button'
-      ];
-      const nested=[];
-      const seen=new Set();
-      nestedSelectors.forEach(sel=>document.querySelectorAll('#content '+sel).forEach(b=>{
-        if(!seen.has(b)){seen.add(b);nested.push(b);}
-      }));
-
-      if(!nested.length){
-        appendSnapshot(sec,fresh?.textContent||'');
-        continue;
-      }
-
-      // Capture each member/sub-ledger. Re-query after every click because
-      // the member renderer replaces the inner shell.
-      for(let j=0;j<nested.length;j++){
-        let current=Array.from(document.querySelectorAll('#content '+nestedSelectors.join(', #content ')))[j];
-        // The combined selector above may contain duplicates; prefer the
-        // original button by its displayed label when the DOM was rebuilt.
-        const targetLabel=escText(nested[j]?.textContent||'');
-        const candidates=[];
-        const seenNow=new Set();
-        nestedSelectors.forEach(sel=>document.querySelectorAll('#content '+sel).forEach(b=>{
-          if(!seenNow.has(b)){seenNow.add(b);candidates.push(b);}
-        }));
-        current=candidates.find(b=>escText(b.textContent||'')===targetLabel) || candidates[j];
-        if(current){current.click();await new Promise(r=>setTimeout(r,10));}
-        const activeLabel=escText(document.querySelector('#content .epfMemberTabs button.active, #content .ppfMemberTabs button.active, #content .npsMemberTabs button.active, #content .superMemberTabs button.active, #content .interestMemberTabs button.active, #content .mfMemberTabs button.active, #content .licMemberTabs button.active, #content .ncdMemberTabs button.active, #content .altgraffMemberTabs button.active')?.textContent||targetLabel);
-        appendSnapshot(sec,(fresh?.textContent||'')+' — '+activeLabel);
-      }
+      const c=printableClone();
+      if(!c) continue;
+      const txt=escText(c.textContent||'').replace(/VMG Personal Financial Manager|Selected FY:|Printed:/gi,'').trim();
+      if(txt.length<25) continue;
+      const sub=document.createElement('div');sub.style.breakInside='avoid';sub.style.pageBreakInside='avoid';
+      const sh=document.createElement('h2');sh.textContent=escText(document.querySelector('#content .subtabbar button.active')?.textContent||fresh?.textContent||'Section');sh.style.fontSize='15px';sh.style.margin='12px 0 6px';sub.appendChild(sh);
+      sub.appendChild(c);sec.appendChild(sub);
     }
   }
   async function printAll(){
@@ -20728,250 +20651,141 @@ document.addEventListener('wheel', function(e){
   });
 })();
 </script>
-<script id="vmg-master-rollover-authority-v2">
+
+<script id="vmg-interest-ledger-single-authority-v2">
 /* ================================================================
-   VMG MASTER ROLLOVER AUTHORITY V2
-   ---------------------------------------------------------------
-   Purpose: one final, non-invasive authority for FUTURE FY rollover.
-   This layer does NOT replace the established calculation engines for
-   EPF/EPS, PPF, MF, NPS, FD, NCD, AltGraff, salary tax or interest.
+   VMG — INTEREST LEDGER AS SINGLE FY INTEREST AUTHORITY V2
 
-   Protected baseline:
-     - FY 2026-27 and all historical financial data are untouched.
-     - Existing manual future-FY entries are preserved.
-     - Planning remains Planning.
-     - Salary Received remains the execution trigger.
-     - Future FY opening balances for Super/APY follow prior FY closing.
-     - Monthly Salary Distribution reads the selected FY CTC components.
-
-   This is intentionally the LAST authority layer in the HTML so earlier
-   experimental rollover patches cannot override these rules afterwards.
-================================================================ */
-(function VMG_MASTER_ROLLOVER_AUTHORITY_V2(){
+   The detailed Interest Ledger is the authoritative reporting source for
+   FY interest. Income no longer displays a duplicate interest section; its
+   ITR calculations continue to use the same underlying Interest Ledger
+   authority. Dashboard Current / Expected / Total Interest is linked to this
+   authority, while all investment/corpus engines remain untouched.
+   ================================================================ */
+(function VMG_INTEREST_LEDGER_SINGLE_AUTHORITY_V2(){
   try{
-    if(!window.d || typeof normalizeFYStart!=='function') return;
-
-    const fyY = v => {
-      try { return normalizeFYStart(v); }
-      catch(e){ const m=String(v||'').match(/20\d{2}/); return m?Number(m[0]):null; }
+    window.phase700InterestLedgerAuthority=function(fy){
+      const label=phase592NormalizeFYLabel(fy);
+      const rows=(typeof phase592InterestSummary==='function')?(phase592InterestSummary(label)||[]):[];
+      const out={rows,currentBy:{Vijay:0,Sweta:0,Rashi:0},expectedBy:{Vijay:0,Sweta:0,Rashi:0},totalBy:{Vijay:0,Sweta:0,Rashi:0},itrBy:{Vijay:0,Sweta:0,Rashi:0},expectedItrBy:{Vijay:0,Sweta:0,Rashi:0},currentTotal:0,expectedTotal:0,total:0,itrTotal:0,expectedItrTotal:0};
+      rows.forEach(x=>{
+        const m=mfNormalizeMember(x.member||'Vijay');
+        if(out.currentBy[m]===undefined){out.currentBy[m]=0;out.expectedBy[m]=0;out.totalBy[m]=0;out.itrBy[m]=0;out.expectedItrBy[m]=0;}
+        const current=Math.max(0,Number(x.currentInterest)||0);
+        const expected=Math.max(0,Number(x.expectedInterest)||0);
+        const total=Math.max(0,Number(x.interest)||0);
+        let itr=0,expectedItr=0;
+        const ledger=String(x.ledger||'').trim().toUpperCase();
+        if(ledger==='FD'){
+          // FD ITR selection is stored per individual FD.
+          ensureFDLedger58();
+          (d.fdLedger58||[]).forEach(fd=>{
+            if(fdMember58(fd.member)!==fdMember58(m))return;
+            const fyMap=fdFYInterest58(fd)||{};
+            const fdTotal=Math.max(0,Number(fyMap[label])||0);
+            if(fdTotal<=0)return;
+            if(phase592ITRChecked(phase592ITRKey('FD',fd.id,label))){
+              const sp=fdFYInterestSplit58(fd,label)||{};
+              itr+=Math.max(0,Number(sp.current)||0);
+              expectedItr+=fdTotal;
+            }
+          });
+        }else{
+          const key=phase592InterestSummaryKey(label,m,x.ledger);
+          if(phase592ITRChecked(key)){itr=current;expectedItr=total;}
+        }
+        out.currentBy[m]+=current;
+        out.expectedBy[m]+=expected;
+        out.totalBy[m]+=total;
+        out.itrBy[m]+=itr;
+        out.expectedItrBy[m]+=expectedItr;
+      });
+      ['currentBy','expectedBy','totalBy','itrBy','expectedItrBy'].forEach(k=>{
+        out[k]=Object.fromEntries(Object.entries(out[k]).map(([m,v])=>[m,Number(v)||0]));
+      });
+      out.currentTotal=Object.values(out.currentBy).reduce((a,b)=>a+b,0);
+      out.expectedTotal=Object.values(out.expectedBy).reduce((a,b)=>a+b,0);
+      out.total=Object.values(out.totalBy).reduce((a,b)=>a+b,0);
+      out.itrTotal=Object.values(out.itrBy).reduce((a,b)=>a+b,0);
+      out.expectedItrTotal=Object.values(out.expectedItrBy).reduce((a,b)=>a+b,0);
+      return out;
     };
-    const fyLabelV2 = y => typeof fyLabel==='function'
-      ? fyLabel(Number(y))
-      : `${Number(y)}-${String(Number(y)+1).slice(-2)}`;
-    const isFuture = v => { const y=fyY(v); return y!=null && y>=2027; };
-    const CTC_KEYS=['basic','hra','employerPF','superann','conveyance','other'];
-    const ctcParts = c => CTC_KEYS.reduce((s,k)=>s+(Number(c&&c[k])||0),0);
-    const ctcValueV2 = c => {
-      const t=ctcParts(c);
-      return t>0 ? t : Math.max(0,Number(c&&c.finalCTC)||0);
-    };
-    const fyRows = () => Array.isArray(d.financialYears)?d.financialYears:[];
-    const ctcRows = () => Array.isArray(d.ctcHistory)?d.ctcHistory:(d.ctcHistory=[]);
-    const rowForFY = fy => ctcRows().find(c=>String(c&&c.fy)===String(fy));
-    const priorCTC = fy => {
-      const y=fyY(fy); if(y==null) return null;
-      return ctcRows()
-        .filter(c=>{const cy=fyY(c&&c.fy); return cy!=null && cy<y && ctcValueV2(c)>0;})
-        .sort((a,b)=>fyY(b.fy)-fyY(a.fy))[0] || null;
-    };
 
-    /* -------------------------------------------------------------
-       1. FUTURE CTC ROLLOVER
-       -------------------------------------------------------------
-       Only a missing/blank future FY is seeded. Existing future values are
-       NEVER overwritten. This prevents an old patch from replacing a value
-       the user has already entered.
-    ------------------------------------------------------------- */
-    function ensureFutureCTCV2(fy){
-      if(!isFuture(fy)) return rowForFY(fy);
-      const prev=priorCTC(fy);
-      let c=rowForFY(fy);
-      if(!c){
-        c={fy,basic:0,hra:0,employerPF:0,superann:0,conveyance:0,other:0,
-           finalCTC:0,hike:0,previousCTC:0};
-        ctcRows().push(c);
-      }
-      /* Do not overwrite a usable future CTC. */
-      if(ctcParts(c)>0 || Number(c.finalCTC)>0){
-        if(prev) c.previousCTC=Math.round(ctcValueV2(prev));
-        return c;
-      }
-      if(!prev) return c;
-
-      /* Carry the complete component structure. This is planning rollover,
-         not salary execution and not a transaction. */
-      CTC_KEYS.forEach(k=>c[k]=Math.max(0,Number(prev[k])||0));
-      c.finalCTC=Math.round(ctcParts(c));
-      c.previousCTC=Math.round(ctcValueV2(prev));
-      c.rolloverAuto=true;
-      c.rolloverSourceFY=prev.fy;
-      return c;
-    }
-
-    window.ensureFutureCTC=ensureFutureCTCV2;
-    window.VMGFutureCTCRolloverV1 = window.VMGFutureCTCRolloverV1 || {};
-    window.VMGFutureCTCRolloverV1.ensureFutureCTC=ensureFutureCTCV2;
-
-    /* Previous CTC remains a pure informational chain for future FYs. */
-    const oldPreviousFinalCTCV2 = window.previousFinalCTC;
-    window.previousFinalCTC=function(fy){
-      if(isFuture(fy)){
-        const p=priorCTC(fy);
-        if(p) return Math.round(ctcValueV2(p));
-      }
-      return typeof oldPreviousFinalCTCV2==='function'
-        ? oldPreviousFinalCTCV2(fy) : 0;
-    };
-    try{ previousFinalCTC=window.previousFinalCTC; }catch(e){}
-
-    /* Existing future rows are only repaired when genuinely blank. */
-    fyRows().forEach(f=>{
-      if(f && isFuture(f.label)) ensureFutureCTCV2(f.label);
-    });
-
-    /* Salary Distribution must always use the selected FY's own CTC. We only
-       ensure a blank future source exists; the established salary calculator
-       remains responsible for all monthly salary/tax/deduction calculations. */
-    const salaryRowsV2Base = window.salaryRows;
-    if(typeof salaryRowsV2Base==='function'){
-      window.salaryRows=function(fy){
-        if(isFuture(fy)) ensureFutureCTCV2(fy);
-        return salaryRowsV2Base(fy);
-      };
-      try{ salaryRows=window.salaryRows; }catch(e){}
-    }
-
-    /* -------------------------------------------------------------
-       2. FUTURE SALARY EXECUTION GUARD
-       -------------------------------------------------------------
-       Do NOT manufacture Received status while switching FY or rendering.
-       We deliberately do not reset a future salary that a user has explicitly
-       marked Received. Existing auto-executed investment rows are handled by
-       the established salary toggle/reversal functions.
-    ------------------------------------------------------------- */
-    const fySwitch=document.getElementById('fy');
-    if(fySwitch && !fySwitch.dataset.vmgMasterRolloverV2){
-      fySwitch.dataset.vmgMasterRolloverV2='1';
-      fySwitch.addEventListener('change',function(){
-        try{
-          const fy=fySwitch.value;
-          if(isFuture(fy)) ensureFutureCTCV2(fy);
-          if(typeof salaryRows==='function') salaryRows(fy);
-          if(typeof render==='function') render();
-          if(typeof saveDataNoToast==='function') saveDataNoToast();
-        }catch(e){console.error('VMG Master FY switch:',e);}
-      },true);
-    }
-
-    /* -------------------------------------------------------------
-       3. SUPERANNUATION — FINAL FUTURE-FY AUTHORITY
-       -------------------------------------------------------------
-       Planned = CTC-linked contribution for the salary month, but only for
-       display/planning. Executed = contribution only when salary is Received.
-       Opening = previous FY actual closing. FY26-27 remains untouched.
-    ------------------------------------------------------------- */
-    if(typeof phase558SuperLedgerCard==='function' &&
-       typeof phase54PostingContext==='function'){
-      const oldSuperCardV2=phase558SuperLedgerCard;
-      phase558SuperLedgerCard=function(fy,member){
-        if(!isFuture(fy) || String(member||'Vijay').trim().toLowerCase()!=='vijay')
-          return oldSuperCardV2(fy,member);
-
-        ensureSuperLedger54();
-        const y=fyY(fy);
-        const opening=Number(phaseLLOpening('Superannuation','Superannuation',fy))||0;
-        const rate=Math.max(0,Number(d.superLedger54?.proposedRate)||0);
-        let running=opening,totalPlan=0,totalExec=0,totalRed=0,totalInterest=0;
-
-        const rows=LEDGER_FY_MONTHS.map(postingMonth=>{
-          const ctx=phase54PostingContext(fy,postingMonth);
-          const p=salaryPlanForMonth54(ctx.salaryFY,ctx.salaryMonth);
-          const planned=Math.max(0,Number(p?monthlyCTC(getCTC(ctx.salaryFY)).super:0)||0);
-          const received=phase54SalaryReceived(ctx.salaryFY,ctx.salaryMonth);
-          const executed=received?planned:0;
-          const redemption=Math.max(0,Number(phase640GetRedemption('Superannuation','Vijay',fy,postingMonth))||0);
-          running=Math.max(0,running+executed-redemption);
-          const monthlyInterest=running*rate/100/12;
-          totalPlan+=planned; totalExec+=executed; totalRed+=redemption; totalInterest+=monthlyInterest;
-          return {postingMonth,ctx,planned,executed,redemption,running,monthlyInterest};
+    /* Detailed Interest Ledger: every non-zero FY-interest component is
+       visible here, including Current, Expected, ITR and Expected ITR. */
+    if(typeof phase54InterestLedgerCard==='function'){
+      phase54InterestLedgerCard=function(member){
+        const mem=String(member||'Vijay');
+        const fy=phase592NormalizeFYLabel(d.selectedFY || (getFY()?.label || ''));
+        const auth=phase700InterestLedgerAuthority(fy);
+        const source=auth.rows.filter(x=>mfNormalizeMember(x.member||'Vijay').toLowerCase()===mfNormalizeMember(mem).toLowerCase());
+        const byLedger=new Map();
+        source.forEach(x=>{
+          const ledger=String(x.ledger||'Other Interest').trim()||'Other Interest';
+          const k=ledger.toLowerCase();
+          if(!byLedger.has(k))byLedger.set(k,{ledger,member:mem,current:0,expected:0,total:0,itr:0,expectedItr:0});
+          const z=byLedger.get(k);
+          z.current+=Math.max(0,Number(x.currentInterest)||0);
+          z.expected+=Math.max(0,Number(x.expectedInterest)||0);
+          z.total+=Math.max(0,Number(x.interest)||0);
+          // Recalculate ITR at the aggregate ledger level. FD needs the
+          // individual-FD selections, while all other ledgers use the
+          // established summary selection key.
+          const ledgerUpper=ledger.toUpperCase();
+          if(ledgerUpper==='FD'){
+            ensureFDLedger58();
+            (d.fdLedger58||[]).forEach(fd=>{
+              if(fdMember58(fd.member)!==fdMember58(mem))return;
+              const fdTotal=Math.max(0,Number((fdFYInterest58(fd)||{})[fy])||0);
+              if(fdTotal<=0)return;
+              if(phase592ITRChecked(phase592ITRKey('FD',fd.id,fy))){
+                const sp=fdFYInterestSplit58(fd,fy)||{};
+                z.itr+=Math.max(0,Number(sp.current)||0);
+                z.expectedItr+=fdTotal;
+              }
+            });
+          }else if(phase592ITRChecked(phase592InterestSummaryKey(fy,mem,ledger))){
+            z.itr+=Math.max(0,Number(x.currentInterest)||0);
+            z.expectedItr+=Math.max(0,Number(x.interest)||0);
+          }
         });
-        const closing=running+totalInterest;
-        return `<div class="card superLedgerFinal"><div class="vmg-planning-legend"><span class="swatch"></span> Blue = Planning-linked &nbsp; | &nbsp; White = Manual / overridden</div><div class="notice"><b>Salary linkage:</b> Executed Credit is linked only to Salary Received. Apr posting is triggered by previous FY Mar salary; May-Mar by the preceding salary month. <b>Opening:</b> FY27-28 onward is carried from the immediately preceding FY closing.</div><div class="superAccountHeader"><div><h2>${esc('Vijay')} — Superannuation</h2><span>Member-wise Superannuation ledger</span></div><div class="superKpis"><div><small>Current Corpus</small><b>₹${fmt(running)}</b></div><div><small>Expected Interest</small><b>₹${fmt(totalInterest)}</b></div><div><small>Corpus + Interest</small><b>₹${fmt(closing)}</b></div></div></div><div class="superOpeningBar"><div><label>Opening Balance</label><input type="number" min="0" step="1" value="${opening}" readonly title="Auto-carried from previous FY closing"></div><div><label>Proposed Interest Rate</label><input type="number" min="0" step="0.01" value="${rate}" onchange="phase558SetSuperRate(this.value)"> % p.a.</div></div><div style="overflow:auto"><table class="superProfessionalTable"><thead><tr><th>Wage Month</th><th>Contribution</th><th>Planned Credit</th><th>Executed Credit</th><th>Redemption</th><th>Proposed Interest</th><th>Closing Balance</th></tr></thead><tbody>${rows.map(r=>{const pm=phase700PostingLabels(fy,r.postingMonth);return `<tr><td><b>${pm.wageMonth}</b></td><td><b>${pm.contributionMonth}</b></td><td><span class="vmg-planning-linked">₹${fmt(r.planned)}</span></td><td><span class="vmg-executed-linked" title="Source: Salary Received">₹${fmt(r.executed)}</span></td><td><input type="number" min="0" step="1" value="${r.redemption}" style="width:120px" onchange="phase640SetSuperRedemption('Vijay','${esc(fy)}','${esc(r.postingMonth)}',this.value)"></td><td>₹${fmt(r.monthlyInterest)}</td><td><b>₹${fmt(r.running+r.monthlyInterest)}</b></td></tr>`}).join('')}<tr class="total-row"><td colspan="2"><b>FY Total</b></td><td><b>₹${fmt(totalPlan)}</b></td><td><b>₹${fmt(totalExec)}</b></td><td><b>₹${fmt(totalRed)}</b></td><td><b>₹${fmt(totalInterest)}</b></td><td><b>₹${fmt(closing)}</b></td></tr></tbody></table></div><div class="superClosingBar"><span>Closing Balance as on 31/03/${y+1}</span><b>₹${fmt(closing)}</b></div></div>`;
+        const memberRows=Array.from(byLedger.values()).sort((a,b)=>String(a.ledger).localeCompare(String(b.ledger)));
+        const sum=k=>memberRows.reduce((s,x)=>s+(Number(x[k])||0),0);
+        return `<div class="card interestProfessionalCard">
+          <div class="interestAccountHeader">
+            <div>
+              <h2>${esc(mem)} — Interest Ledger</h2>
+              <span>Complete FY interest break-up — member-wise and ledger-wise</span>
+            </div>
+            <div class="interestAccountKpis"><div><small>${esc(fy)} Total Interest</small><b>₹${fmt(sum('total'))}</b></div></div>
+          </div>
+          <div class="interestControlBar"><div><b>${esc(mem)} — ${esc(fy)}</b> — this ledger is the single authoritative FY interest source for Dashboard and Income/ITR linkage. No separate interest calculation is performed in Income.</div></div>
+          <div style="overflow:auto;margin-top:12px">
+            <table class="compact interestSummaryTable">
+              <thead><tr><th>Investment Ledger</th><th>Member</th><th>Current Interest</th><th>Expected Interest</th><th>Total FY Interest</th><th>ITR</th><th>Expected ITR</th></tr></thead>
+              <tbody>
+                ${memberRows.map(x=>`<tr><td><b>${esc(x.ledger)}</b></td><td>${esc(x.member)}</td><td class="num">₹${fmt(x.current)}</td><td class="num">₹${fmt(x.expected)}</td><td class="num"><b>₹${fmt(x.total)}</b></td><td class="num">₹${fmt(x.itr)}</td><td class="num">₹${fmt(x.expectedItr)}</td></tr>`).join('') || `<tr><td colspan="7" class="empty">No interest recorded for ${esc(mem)} in ${esc(fy)}.</td></tr>`}
+                <tr class="total-row"><td colspan="2"><b>${esc(mem)} TOTAL</b></td><td><b>₹${fmt(sum('current'))}</b></td><td><b>₹${fmt(sum('expected'))}</b></td><td><b>₹${fmt(sum('total'))}</b></td><td><b>₹${fmt(sum('itr'))}</b></td><td><b>₹${fmt(sum('expectedItr'))}</b></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="notice" style="margin-top:10px"><b>Reconciliation rule:</b> Current Interest + Expected Interest = Total FY Interest. The three member totals together are the Dashboard / Investment Summary FY interest. ITR is a selected taxable subset and is not added to Total Interest.</div>
+        </div>`;
       };
-      try{ window.phase558SuperLedgerCard=phase558SuperLedgerCard; }catch(e){}
     }
 
-    /* Super opening: strict previous-FY closing for future years. FY26-27 is
-       delegated to the already-established base/manual resolver. */
-    if(typeof phaseLLOpening==='function' && typeof phaseLLClosing==='function'){
-      const oldOpenV2=phaseLLOpening;
-      phaseLLOpening=function(ledger,account,fy){
-        const L=String(ledger||'');
-        if(L!=='Superannuation' && L!=='APY') return oldOpenV2(ledger,account,fy);
-        const f=fyY(fy);
-        if(f==null || f<2027) return oldOpenV2(ledger,account,fy);
-        const prev=fyLabelV2(f-1);
-        const prevOpening=oldOpenV2(L,account,prev);
-        return Math.max(0,Number(phaseLLClosing(L,account,prev,prevOpening))||0);
+    /* Remove only the duplicate Interest card from Income. The underlying ITR
+       authority remains available through phase700InterestLedgerAuthority(). */
+    if(typeof phase700IncomeSummaryCards==='function'){
+      const oldIncomeSummary=phase700IncomeSummaryCards;
+      phase700IncomeSummaryCards=function(fy){
+        const html=oldIncomeSummary(fy);
+        return html.replace(/\n  <div class="card">\s*<h2>Interest — Member-wise<\/h2>[\s\S]*?<\/div>\n  <\/div>$/, '');
       };
-      try{ window.phaseLLOpening=phaseLLOpening; }catch(e){}
     }
 
-    /* -------------------------------------------------------------
-       4. APY — FINAL FUTURE-FY AUTHORITY
-       ------------------------------------------------------------- */
-    if(typeof phase564APYLedgerCard==='function' && typeof phase54PostingContext==='function'){
-      const oldAPYCardV2=phase564APYLedgerCard;
-      phase564APYLedgerCard=function(fy,member){
-        if(!isFuture(fy)) return oldAPYCardV2(fy,member);
-        ensureAPYMemberLedgers();
-        const key=phase564APYMemberKey(member);
-        const opening=Math.max(0,Number(phaseLLOpening('APY',key,fy))||0);
-        const rate=Math.max(0,Number(d.apyInterestRate)||0);
-        let running=opening,totalPlan=0,totalExec=0,totalRed=0,totalInterest=0;
-        const rows=LEDGER_FY_MONTHS.map(postingMonth=>{
-          const plans=(d.investmentPlans||[]).filter(r=>r&&String(r.fy)===String(fy)&&String(r.month)===String(postingMonth)&&String(r.type||'').trim().toUpperCase()==='APY'&&phase564APYMemberKey(r.member||member)===key);
-          const planned=plans.reduce((s,r)=>s+Math.max(0,Number(r.planned)||0),0);
-          const ctx=phase54PostingContext(fy,postingMonth);
-          const received=String(member).trim().toUpperCase()==='SWETA'
-            ? phase574SwetaSalaryExecutedForPosting(fy,postingMonth)
-            : phase54SalaryReceived(ctx.salaryFY,ctx.salaryMonth);
-          const executed=received?planned:0;
-          const redemption=Math.max(0,Number(phase640GetRedemption('APY',member,fy,postingMonth))||0);
-          running=Math.max(0,running+executed-redemption);
-          const monthlyInterest=running*rate/100/12;
-          totalPlan+=planned; totalExec+=executed; totalRed+=redemption; totalInterest+=monthlyInterest;
-          return {postingMonth,planned,executed,redemption,running,monthlyInterest};
-        });
-        const closing=running+totalInterest;
-        return `<div class="card apyProfessionalCard"><div class="vmg-source-badge"><span class="vmg-source-dot"></span> <span>Blue font = Planned figure linked from Planning / Income &nbsp; | &nbsp; Executed = salary Received</span></div><div class="notice"><b>Salary linkage:</b> Executed APY is zero until the corresponding salary is marked Received. <b>Opening:</b> FY27-28 onward is carried from the immediately preceding FY closing.</div><div class="apyAccountHeader"><div><h2>${esc(member)} — APY</h2><span>Member-wise Atal Pension Yojana ledger</span></div><div class="apyAccountKpis"><div><small>Current Corpus</small><b>₹${fmt(running)}</b></div><div><small>Expected Interest</small><b>₹${fmt(totalInterest)}</b></div><div><small>Corpus + Interest</small><b>₹${fmt(closing)}</b></div></div></div><div class="npsOpeningBar apyOpeningBar"><div><label>Opening Balance — Auto-carried from 31/03/${f-0}</label><input class="npsOpeningInput" type="number" min="0" step="1" value="${opening}" readonly title="Auto-carried from previous FY closing"></div></div><div style="overflow:auto"><table class="compact apyLedgerFinal"><thead><tr><th>Wage Month</th><th>Contribution</th><th>Planned</th><th>Executed</th><th>Redemption</th><th>Proposed Interest</th><th>Closing Balance</th></tr></thead><tbody>${rows.map(r=>{const pm=phase700PostingLabels(fy,r.postingMonth);return `<tr><td><b>${pm.wageMonth}</b></td><td><b>${pm.contributionMonth}</b></td><td><span class="vmg-planning-linked">₹${fmt(r.planned)}</span></td><td><span class="vmg-executed-linked">₹${fmt(r.executed)}</span></td><td><input type="number" min="0" step="1" value="${r.redemption}" style="width:120px" onchange="phase640SetAPYRedemption('${esc(member)}','${esc(fy)}','${esc(r.postingMonth)}',this.value)"></td><td>₹${fmt(r.monthlyInterest)}</td><td><b>₹${fmt(r.running+r.monthlyInterest)}</b></td></tr>`}).join('')}<tr class="total-row"><td colspan="2"><b>Total FY</b></td><td><b>₹${fmt(totalPlan)}</b></td><td><b>₹${fmt(totalExec)}</b></td><td><b>₹${fmt(totalRed)}</b></td><td><b>₹${fmt(totalInterest)}</b></td><td><b>₹${fmt(closing)}</b></td></tr><tr class="closing-row"><td colspan="6"><b>Closing Balance as on 31/03/${f+1}</b></td><td><b>₹${fmt(closing)}</b></td></tr></tbody></table></div></div>`;
-      };
-      try{ window.phase564APYLedgerCard=phase564APYLedgerCard; }catch(e){}
-    }
-
-    /* -------------------------------------------------------------
-       5. NO PLANNING/TEMPLATE CLONING ON FY SWITCH
-       Existing user-created planning rows remain untouched.
-    ------------------------------------------------------------- */
-    window.phase637SyncPlanningTemplateOnFYSwitch=function(){return false;};
-    window.phase636EnsurePlanningTemplate=function(){return false;};
-    window.phaseLLClonePreviousPlanning=function(){return false;};
-
-    /* One final render/save only; no ledger transactions are created here. */
-    if(typeof saveDataNoToast==='function') saveDataNoToast();
-    if(isFuture(d.selectedFY) && typeof render==='function') render();
-
-    window.VMG_MASTER_ROLLOVER_AUTHORITY_V2={
-      version:'2.0',
-      protectedBaselineFY:'FY 2026-27',
-      futureCTCRollover:'blank-only',
-      futureExecution:'salary-received-only',
-      planningClone:false,
-      superAPYOpening:'previous-FY-closing'
-    };
-  }catch(e){
-    console.error('VMG MASTER ROLLOVER AUTHORITY V2:',e);
-  }
+    if(typeof render==='function') setTimeout(()=>{try{render();}catch(e){}},0);
+  }catch(e){console.error('VMG Interest Ledger single authority V2:',e);}
 })();
 </script>
 </body></html>
@@ -21627,70 +21441,4 @@ table th,table td{
 })();
 </script>
 
-<script id="vmg-restore-file-final-fix">
-/* VMG RESTORE FILE FINAL FIX
-   The Restore input existed in the toolbar but had no file-change handler in
-   the current master HTML. This binds the JSON backup importer without changing
-   any calculation, ledger, rollover, sync, or stored-data rules. */
-(function VMG_RESTORE_FILE_FINAL_FIX(){
-  function bind(){
-    const input=document.getElementById('restore');
-    if(!input || input.dataset.vmgRestoreBound==='1') return;
-    input.dataset.vmgRestoreBound='1';
-    input.addEventListener('change',function(){
-      const file=input.files && input.files[0];
-      if(!file) return;
-      const reader=new FileReader();
-      reader.onload=function(){
-        try{
-          const raw=String(reader.result||'');
-          const payload=JSON.parse(raw);
-          const restored=(payload && payload.data && typeof payload.data==='object') ? payload.data : payload;
-          if(!restored || typeof restored!=='object' || !Array.isArray(restored.financialYears)){
-            throw new Error('This is not a valid VMG Financial Manager backup.');
-          }
-          if(payload && payload.backupFormat && payload.backupFormat!=='VMG-PFM-BACKUP'){
-            throw new Error('Unsupported VMG backup format.');
-          }
-          const fyCount=restored.financialYears.length;
-          const memberCount=Array.isArray(restored.members)?restored.members.length:0;
-          const selected=String(restored.selectedFY||'');
-          const ok=confirm(
-            'Restore this VMG backup?\n\n' +
-            'Financial years: '+fyCount+'\n' +
-            'Members: '+memberCount+'\n' +
-            (selected ? 'Selected FY: '+selected+'\n\n' : '\n') +
-            'This will replace the current data in this browser only.'
-          );
-          if(!ok) return;
 
-          if(typeof vmgAdoptData==='function'){
-            vmgAdoptData(structuredClone(restored));
-          }else{
-            d=structuredClone(restored);
-            d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||'').slice(0,60)};
-            localStorage.setItem(KEY,JSON.stringify(d));
-          }
-
-          const fy=document.getElementById('fy');
-          if(fy) fy.value=d.selectedFY||'';
-          if(typeof render==='function') render();
-          if(typeof msg==='function') msg('VMG backup restored successfully.');
-        }catch(err){
-          console.error('VMG Restore failed:',err);
-          alert('Restore failed: '+(err && err.message ? err.message : String(err)));
-        }finally{
-          input.value='';
-        }
-      };
-      reader.onerror=function(){
-        alert('Restore failed: the backup file could not be read.');
-        input.value='';
-      };
-      reader.readAsText(file);
-    });
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true});
-  else bind();
-})();
-</script>
