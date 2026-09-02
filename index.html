@@ -9929,7 +9929,11 @@ function phase580AuthoritativeSubledgerRows(fyOverride){
   Object.keys(agByMember).concat(
     Object.keys(agInterestByMember).filter(m=>!agByMember[m])
   ).forEach(mem=>{
-    const corpus=agByMember[mem]||0,interest=agInterestByMember[mem]||0;
+    const corpus=agByMember[mem]||0;
+    // IMPORTANT: Investment Summary normalizes AltGraff to interest realized
+    // in the selected FY. Use that exact same authority here so Dashboard
+    // Total Interest and Projected Corpus cannot diverge from Summary.
+    const interest=Math.max(0,Number(phase66AltGraffFYInterestByMember(fy,mem))||0);
     if(corpus>0||interest>0)
       add(mem,"AltGraff",agAccountByMember[mem]||("AltGraff - "+mem),corpus,interest);
   });
