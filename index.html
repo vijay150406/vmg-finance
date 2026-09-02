@@ -21622,3 +21622,71 @@ table th,table td{
   }catch(e){console.error('VMG PATCH16 Super/APY authoritative:',e);}
 })();
 </script>
+
+<script id="vmg-restore-file-final-fix">
+/* VMG RESTORE FILE FINAL FIX
+   The Restore input existed in the toolbar but had no file-change handler in
+   the current master HTML. This binds the JSON backup importer without changing
+   any calculation, ledger, rollover, sync, or stored-data rules. */
+(function VMG_RESTORE_FILE_FINAL_FIX(){
+  function bind(){
+    const input=document.getElementById('restore');
+    if(!input || input.dataset.vmgRestoreBound==='1') return;
+    input.dataset.vmgRestoreBound='1';
+    input.addEventListener('change',function(){
+      const file=input.files && input.files[0];
+      if(!file) return;
+      const reader=new FileReader();
+      reader.onload=function(){
+        try{
+          const raw=String(reader.result||'');
+          const payload=JSON.parse(raw);
+          const restored=(payload && payload.data && typeof payload.data==='object') ? payload.data : payload;
+          if(!restored || typeof restored!=='object' || !Array.isArray(restored.financialYears)){
+            throw new Error('This is not a valid VMG Financial Manager backup.');
+          }
+          if(payload && payload.backupFormat && payload.backupFormat!=='VMG-PFM-BACKUP'){
+            throw new Error('Unsupported VMG backup format.');
+          }
+          const fyCount=restored.financialYears.length;
+          const memberCount=Array.isArray(restored.members)?restored.members.length:0;
+          const selected=String(restored.selectedFY||'');
+          const ok=confirm(
+            'Restore this VMG backup?\n\n' +
+            'Financial years: '+fyCount+'\n' +
+            'Members: '+memberCount+'\n' +
+            (selected ? 'Selected FY: '+selected+'\n\n' : '\n') +
+            'This will replace the current data in this browser only.'
+          );
+          if(!ok) return;
+
+          if(typeof vmgAdoptData==='function'){
+            vmgAdoptData(structuredClone(restored));
+          }else{
+            d=structuredClone(restored);
+            d._sync={updatedAt:new Date().toISOString(),device:(navigator.userAgent||'').slice(0,60)};
+            localStorage.setItem(KEY,JSON.stringify(d));
+          }
+
+          const fy=document.getElementById('fy');
+          if(fy) fy.value=d.selectedFY||'';
+          if(typeof render==='function') render();
+          if(typeof msg==='function') msg('VMG backup restored successfully.');
+        }catch(err){
+          console.error('VMG Restore failed:',err);
+          alert('Restore failed: '+(err && err.message ? err.message : String(err)));
+        }finally{
+          input.value='';
+        }
+      };
+      reader.onerror=function(){
+        alert('Restore failed: the backup file could not be read.');
+        input.value='';
+      };
+      reader.readAsText(file);
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true});
+  else bind();
+})();
+</script>
