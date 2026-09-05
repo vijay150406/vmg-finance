@@ -123,7 +123,9 @@ input[type="number"]{
   -moz-appearance:textfield!important;
   appearance:textfield!important;
 }
-.vmg-alloc-money{white-space:nowrap;font-variant-numeric:tabular-nums}.vmg-alloc-table th,.vmg-alloc-table td{vertical-align:middle}.vmg-alloc-total{display:flex;flex-wrap:wrap;gap:14px;align-items:center}.vmg-alloc-total span{white-space:nowrap}</style></style></style></style>
+.vmg-alloc-money{white-space:nowrap;font-variant-numeric:tabular-nums}.vmg-alloc-table th,.vmg-alloc-table td{vertical-align:middle}.vmg-alloc-total{display:flex;flex-wrap:wrap;gap:14px;align-items:center}.vmg-alloc-total span{white-space:nowrap}.vmg-fund-type-select{min-width:118px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:inherit;font:inherit}.vmg-advised-target{white-space:nowrap;color:#174a7e}.vmg-allocation-card .vmg-alloc-table th:nth-child(2),.vmg-allocation-card .vmg-alloc-table td:nth-child(2){min-width:125px}.vmg-alloc-table-total td{font-weight:700;background:#eef4ff;border-top:2px solid #9fb7d9;}
+.vmg-alloc-table-total td:first-child{font-size:15px;}
+</style></style></style></style>
 </style>
 <style>
 .mfLedgerFinal{min-width:1150px}
@@ -7284,13 +7286,36 @@ function phase54InterestLedgerCard(member){
   const mem=String(member||"Vijay");
   const fy=phase592NormalizeFYLabel(d.selectedFY || (getFY()?.label || ""));
   const memberRows=phase592InterestSummary(fy,mem);
-  const memberTotal=memberRows.reduce((s,x)=>s+x.interest,0);
+  const memberTotal=memberRows.reduce((s,x)=>s+(Number(x.interest)||0),0);
+
+  // ITR interest follows the existing ITR-selection logic.  Non-FD ledgers
+  // use the member/ledger FY selection; FD uses the individual FD selection
+  // because FD selections are stored per certificate + FY.
+  const itrByLedger={};
+  memberRows.forEach(x=>{
+    const ledger=String(x.ledger||"Other Interest");
+    let selected=0;
+    if(ledger.toUpperCase()==="FD"){
+      ensureFDLedger58();
+      (d.fdLedger58||[]).forEach(fd=>{
+        if(fdMember58(fd.member)!==fdMember58(mem))return;
+        const amount=Math.max(0,Number((fdFYInterest58(fd)||{})[fy])||0);
+        if(amount<=0)return;
+        if(phase592ITRChecked(phase592ITRKey("FD",fd.id,fy))) selected+=amount;
+      });
+    }else{
+      const key=phase592InterestSummaryKey(fy,mem,ledger);
+      if(phase592ITRChecked(key)) selected=Number(x.interest)||0;
+    }
+    itrByLedger[ledger]=(itrByLedger[ledger]||0)+selected;
+  });
+  const memberITR=Object.values(itrByLedger).reduce((s,v)=>s+(Number(v)||0),0);
 
   return `<div class="card interestProfessionalCard">
     <div class="interestAccountHeader">
       <div>
         <h2>${esc(mem)} — Interest Ledger</h2>
-        <span>Member-wise, ledger-wise interest summary for the selected FY</span>
+        <span>Ledger-wise interest summary for the selected FY</span>
       </div>
       <div class="interestAccountKpis">
         <div><small>${esc(fy)} Total Interest</small><b>₹${fmt(memberTotal)}</b></div>
@@ -7298,24 +7323,33 @@ function phase54InterestLedgerCard(member){
     </div>
 
     <div class="interestControlBar">
-      <div><b>${esc(mem)} — ${esc(fy)}</b> — only this member's <b>total interest for the selected FY</b> is displayed. ITR selection remains in the detailed ledger and Income/ITR tab.</div>
+      <div><b>${esc(mem)} — ${esc(fy)}</b> — Current Interest is interest accrued/received up to today; Total Interest is the complete selected-FY interest; ITR Interest is the amount selected for ITR.</div>
     </div>
 
     <div style="overflow:auto;margin-top:12px">
       <table class="compact interestSummaryTable">
         <thead><tr>
-          <th>Investment Ledger</th><th>Member</th>
+          <th>Investment Ledger</th>
+          <th>${esc(fy)} Current Interest</th>
           <th>${esc(fy)} Total Interest</th>
+          <th>${esc(fy)} ITR Interest</th>
         </tr></thead>
         <tbody>
-          ${memberRows.map(x=>`<tr>
-              <td><b>${esc(x.ledger)}</b></td>
-              <td>${esc(x.member)}</td>
-              <td class="num"><b>₹${fmt(x.interest)}</b></td>
-            </tr>`).join("") || `<tr><td colspan="3" class="empty">No interest recorded for ${esc(mem)} in ${esc(fy)}.</td></tr>`}
+          ${memberRows.map(x=>{
+            const ledger=String(x.ledger||"Other Interest");
+            const itrAmount=Number(itrByLedger[ledger]||0);
+            return `<tr>
+              <td><b>${esc(ledger)}</b></td>
+              <td class="num"><b>₹${fmt(x.currentInterest||0)}</b></td>
+              <td class="num"><b>₹${fmt(x.interest||0)}</b></td>
+              <td class="num"><b>₹${fmt(itrAmount)}</b></td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="4" class="empty">No interest recorded for ${esc(mem)} in ${esc(fy)}.</td></tr>`}
           <tr class="total-row">
-            <td colspan="2"><b>${esc(mem)} TOTAL</b></td>
+            <td><b>${esc(mem)} TOTAL</b></td>
+            <td><b>₹${fmt(memberRows.reduce((s,x)=>s+(Number(x.currentInterest)||0),0))}</b></td>
             <td><b>₹${fmt(memberTotal)}</b></td>
+            <td><b>₹${fmt(memberITR)}</b></td>
           </tr>
         </tbody>
       </table>
@@ -13739,7 +13773,7 @@ function phase526PlanningSubtab(key){
     const del=synthetic
       ? `<button type="button" class="small" onclick="phase526DeleteMFSourcePlanGroup('${esc(fy)}','${esc(g.key)}')">Delete X</button>`
       : `<button type="button" class="small" onclick="phase526DeletePlanGroup('${esc(fy)}','investment','${esc(g.key)}')">Delete X</button>`;
-    return `<tr>${memberCell?`<td>${memberCell}</td>`:""}<td>${typeCell}</td><td>${descCell}</td>${cells}<td>${del}</td></tr>`;
+    return `<tr>${memberCell?`<td>${memberCell}</td>`:""}<td>${typeCell}</td><td>${descCell}</td>${cells}<td style="width:110px;min-width:110px;text-align:right!important"><b>₹${fmt(months.reduce((s,m)=>s+(Number(g.months[m]?.planned)||0),0))}</b></td><td>${del}</td></tr>`;
   }).join("");
 
   const invTotalRow=months.map(m=>`<td>₹${fmt(inv.reduce((s,g)=>s+(Number(g.months[m]?.planned)||0),0))}</td>`).join("");
@@ -13748,10 +13782,10 @@ function phase526PlanningSubtab(key){
   <div class="card">
     <h2>Investment Allocation — ${esc(selectedFundingMember)}</h2>
     <p><button type="button" class="small" onclick="phase526AddFundingInvestmentPlan('${esc(fy)}','${esc(selectedFundingMember)}')">+ Add Investment Line</button></p>
-    <div style="overflow:auto"><table class="horizontalPlan planAligned plan-investment investmentPlan plan-funding-${String(selectedFundingMember||"Vijay").toLowerCase()}"><colgroup><col style="width:100px"><col style="width:130px"><col style="width:130px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:90px"></colgroup>
-      <thead><tr><th>Member</th><th>Type</th><th>Acc / Inst</th>${months.map(m=>`<th class="plan-month" style="width:95px;min-width:95px;max-width:95px;text-align:center!important;padding-left:0;padding-right:0">${m}</th>`).join("")}<th>Action</th></tr></thead>
-      <tbody>${invRows||`<tr><td colspan="16" class="empty">No investment plans under ${esc(selectedFundingMember)}.</td></tr>`}
-      <tr class="total"><td colspan="3"><b>Total Investments — ${esc(selectedFundingMember)}</b></td>${invTotalRow}<td></td></tr>
+    <div style="overflow:auto"><table class="horizontalPlan planAligned plan-investment investmentPlan plan-funding-${String(selectedFundingMember||"Vijay").toLowerCase()}"><colgroup><col style="width:100px"><col style="width:130px"><col style="width:130px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:110px"><col style="width:90px"></colgroup>
+      <thead><tr><th>Member</th><th>Type</th><th>Acc / Inst</th>${months.map(m=>`<th class="plan-month" style="width:95px;min-width:95px;max-width:95px;text-align:center!important;padding-left:0;padding-right:0">${m}</th>`).join("")}<th style="width:110px;min-width:110px">Total</th><th>Action</th></tr></thead>
+      <tbody>${invRows||`<tr><td colspan="17" class="empty">No investment plans under ${esc(selectedFundingMember)}.</td></tr>`}
+      <tr class="total"><td colspan="3"><b>Total Investments — ${esc(selectedFundingMember)}</b></td>${invTotalRow}<td><b>₹${fmt(inv.reduce((s,g)=>s+months.reduce((a,m)=>a+(Number(g.months[m]?.planned)||0),0),0))}</b></td><td></td></tr>
       </tbody>
     </table></div>
   </div>`;
@@ -13763,6 +13797,7 @@ function phase526PlanningSubtab(key){
       <td><select onchange="phase526ChangeGroup('${esc(fy)}','expense','${esc(g.key)}','category',this.value)">${cats.map(t=>`<option value="${esc(t)}" ${t===g.category?"selected":""}>${esc(t)}</option>`).join("")}</select></td>
       <td><input value="${esc(g.description)}" onchange="phase526ChangeGroup('${esc(fy)}','expense','${esc(g.key)}','description',this.value)"></td>
       ${months.map(m=>{const r=g.months[m];const v=r?Number(r.planned)||0:"";const cls=(phase526PlanMonthGrey(fy,m)||(r&&r.autoExecuted))?" vmg-input-grey":"";return `<td style="width:95px;min-width:95px;max-width:95px;text-align:right!important"><input class="moneyCell${cls}" style="width:90px;min-width:90px;max-width:90px;box-sizing:border-box;text-align:right!important" type="number" min="0" step="1" value="${v}" onchange="phase526SetPlanCell('${esc(fy)}','expense','${esc(g.key)}','${esc(m)}',this.value)"></td>`;}).join("")}
+      <td style="width:110px;min-width:110px;text-align:right!important"><b>₹${fmt(months.reduce((s,m)=>s+(Number(g.months[m]?.planned)||0),0))}</b></td>
       <td><button type="button" class="small" onclick="phase526DeletePlanGroup('${esc(fy)}','expense','${esc(g.key)}')">Delete X</button></td>
     </tr>`).join("");
     const expTotalRow=months.map(m=>`<td>₹${fmt(exp.reduce((s,g)=>s+(Number(g.months[m]?.planned)||0),0))}</td>`).join("");
@@ -13775,9 +13810,9 @@ function phase526PlanningSubtab(key){
     <div class="card">
       <h2>Expense Allocation — Vijay</h2>
       <p><button type="button" class="small" onclick="phase526AddHorizontalPlan('${esc(fy)}','expense')">+ Add Expense Line</button></p>
-      <div style="overflow:auto"><table class="horizontalPlan planAligned plan-expense"><colgroup><col style="width:130px"><col style="width:230px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:90px"></colgroup><thead><tr><th>Cat.</th><th>Desc.</th>${months.map(m=>`<th class="plan-month" style="width:95px;min-width:95px;max-width:95px;text-align:center!important;padding-left:0;padding-right:0">${m}</th>`).join("")}<th>Action</th></tr></thead>
-      <tbody>${expRows||'<tr><td colspan="15" class="empty">No expense plans entered.</td></tr>'}
-      <tr class="total"><td colspan="2"><b>Total Expenses</b></td>${expTotalRow}<td></td></tr></tbody></table></div>
+      <div style="overflow:auto"><table class="horizontalPlan planAligned plan-expense"><colgroup><col style="width:130px"><col style="width:230px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:110px"><col style="width:90px"></colgroup><thead><tr><th>Cat.</th><th>Desc.</th>${months.map(m=>`<th class="plan-month" style="width:95px;min-width:95px;max-width:95px;text-align:center!important;padding-left:0;padding-right:0">${m}</th>`).join("")}<th style="width:110px;min-width:110px">Total</th><th>Action</th></tr></thead>
+      <tbody>${expRows||'<tr><td colspan="16" class="empty">No expense plans entered.</td></tr>'}
+      <tr class="total"><td colspan="2"><b>Total Expenses</b></td>${expTotalRow}<td><b>₹${fmt(exp.reduce((s,g)=>s+months.reduce((a,m)=>a+(Number(g.months[m]?.planned)||0),0),0))}</b></td><td></td></tr></tbody></table></div>
     </div>
     <div class="card">
       <h2>Monthly Fund Balance — Vijay Salary</h2>
@@ -14013,14 +14048,204 @@ const VMG_ALLOC_ASSETS=[
   {key:"NCD",label:"NCD",control:"user"},
   {key:"NPS",label:"NPS",control:"limited"},
   {key:"LIC",label:"LIC",control:"user"},
-  {key:"NSC",label:"NSC",control:"user"},
-  {key:"APY",label:"APY",control:"user"},
-  {key:"Other",label:"Other",control:"user"}
+  {key:"APY",label:"APY",control:"auto"}
 ];
 const VMG_ALLOC_DEFAULTS={
   "PPF":20,"EPF / EPS":25,"FD":15,"Mutual Fund":15,"Superannuation":6,
   "AltGraff":4,"NCD":5,"NPS":8,"LIC":2,"NSC":0,"APY":0,"Other":0
 };
+
+/*
+   FUND-TYPE CLASSIFICATION
+   User-selectable classification used to make the allocation plan easier to
+   review by risk bucket. It does not change corpus calculations.
+*/
+const VMG_ALLOC_FUND_TYPES=["Debt Fund","Equity Fund","Hybrid Fund","Liquid Fund"];
+const VMG_ALLOC_DEFAULT_TYPES={
+  "PPF":"Debt Fund",
+  "EPF / EPS":"Debt Fund",
+  "FD":"Debt Fund",
+  "Mutual Fund":"Equity Fund",
+  "Superannuation":"Debt Fund",
+  "AltGraff":"Debt Fund",
+  "NCD":"Debt Fund",
+  "NPS":"Hybrid Fund",
+  "LIC":"Debt Fund",
+  "NSC":"Debt Fund",
+  "APY":"Debt Fund",
+  "Other":"Liquid Fund"
+};
+
+/*
+   Starting-point advice for Vijay's current lifecycle: about age 49 with
+   roughly 9 years to the stated retirement age of 58. The recommendation is
+   intentionally more conservative than the broad 45-58 investor cohort
+   average because the retirement horizon is much shorter. It is a planning
+   starting point, not a promise of returns or a substitute for personal
+   investment advice. The editable Target % remains the actual allocation
+   control used by this module.
+*/
+const VMG_ALLOC_ADVISED_TARGETS={
+  "PPF":10,"EPF / EPS":25,"FD":11,"Mutual Fund":30,"Superannuation":6,
+  "AltGraff":3,"NCD":5,"NPS":8,"LIC":2,"APY":0
+};
+
+/*
+   QUARTERLY ADVICE ARCHITECTURE
+   The standalone HTML preserves advice by FY + quarter so a new review never
+   overwrites the previous quarter. A quarterly review can update the advised
+   mix after considering the market scenario at that time. The editable Target %
+   remains the user's actual planning input.
+*/
+const VMG_ALLOC_QUARTERS=["Q1 (Apr-Jun)","Q2 (Jul-Sep)","Q3 (Oct-Dec)","Q4 (Jan-Mar)"];
+function phaseAllocQuarterForDate(date=new Date()){
+  const m=date.getMonth()+1;
+  return m>=4&&m<=6?"Q1 (Apr-Jun)":m>=7&&m<=9?"Q2 (Jul-Sep)":m>=10&&m<=12?"Q3 (Oct-Dec)":"Q4 (Jan-Mar)";
+}
+function phaseAllocQuarterKey(fy,quarter){ return String(fy||"")+"|"+String(quarter||phaseAllocQuarterForDate()); }
+function phaseAllocEnsureQuarterly(){
+  phaseAllocEnsure();
+  if(!d.allocationQuarterlyAdvice || typeof d.allocationQuarterlyAdvice!=="object" || Array.isArray(d.allocationQuarterlyAdvice)) d.allocationQuarterlyAdvice={};
+  const fy=d.selectedFY||getFY()?.label||"";
+  const q=phaseAllocQuarterForDate();
+  const key=phaseAllocQuarterKey(fy,q);
+  if(!d.allocationQuarterlyAdvice[key]) d.allocationQuarterlyAdvice[key]={
+    fy, quarter:q, reviewedOn:new Date().toISOString().slice(0,10),
+    marketScenario:"Quarterly review required", advisedTargets:{...VMG_ALLOC_ADVISED_TARGETS}, notes:"Update this quarter after reviewing the prevailing market scenario, rates, valuation and the remaining retirement horizon."
+  };
+  return d.allocationQuarterlyAdvice[key];
+}
+function phaseAllocAdvisedTargetsForCurrentQuarter(fy){
+  const q=phaseAllocQuarterForDate();
+  const key=phaseAllocQuarterKey(fy,q);
+  const saved=d.allocationQuarterlyAdvice?.[key];
+  return saved?.advisedTargets || VMG_ALLOC_ADVISED_TARGETS;
+}
+
+/* ==================== ONLINE QUARTERLY TARGET ADVISER ====================
+   Long-life design: the browser determines the current FY/quarter from the
+   system date. The actual market review is delegated to a secure backend/API
+   so API keys are never embedded in this GitHub Pages HTML. The endpoint is
+   user-configurable and its result is stored permanently by FY + quarter.
+*/
+const VMG_ALLOC_ADVISER_CONFIG_KEY='vmgAllocationAdviserConfigV2';
+function phaseAllocAdviserConfig(){
+  try{ return JSON.parse(localStorage.getItem(VMG_ALLOC_ADVISER_CONFIG_KEY)||'{}')||{}; }catch(e){ return {}; }
+}
+function phaseAllocAdviserSetConfig(url,token){
+  const cfg=phaseAllocAdviserConfig();
+  cfg.endpoint=String(url||'').trim();
+  cfg.token=String(token||'').trim();
+  localStorage.setItem(VMG_ALLOC_ADVISER_CONFIG_KEY,JSON.stringify(cfg));
+}
+function phaseAllocAdviserPayload(fy){
+  const g=phaseAllocGuidance(fy);
+  const q=phaseAllocQuarterForDate();
+  const key=phaseAllocQuarterKey(fy,q);
+  const previous=d.allocationQuarterlyAdvice?.[key]||null;
+  return {
+    requestType:'VMG_ALLOCATION_QUARTERLY_REVIEW',
+    asOf:new Date().toISOString(), fy, quarter:q,
+    investor:{retirementAge:58,planningHorizonYears:9},
+    assets:g.rows.map(r=>({asset:r.key,control:r.control,currentPct:Number(r.current.toFixed(4)),activePrincipal:Number(r.corpus||0),fundType:phaseAllocFundTypeStore()[r.key]||VMG_ALLOC_DEFAULT_TYPES[r.key],currentTargetPct:Number(r.target||0),fixed:r.control==='auto'})),
+    previousAdvice:previous,
+    constraints:{appliedToNewAllocationOnly:true,apy:'AUTO',autoAssets:['EPF / EPS','Superannuation','APY'],maintainLabel:'Maintain'},
+    requestedSources:['SEBI','AMFI','RBI','EPFO','PFRDA','NSE/BSE','official issuer sources','Reuters','Economic Times','Mint','Moneycontrol'],
+    output:{advisedTargets:'object keyed by asset, total 100 across controllable assets; AUTO assets 0',marketScenario:'string',notes:'string',confidence:'High|Moderate|Low',sources:'array of title,url,why',reviewedOn:'YYYY-MM-DD'}
+  };
+}
+function phaseAllocAdviceRenderSources(sources){
+  if(!Array.isArray(sources)||!sources.length)return '';
+  return `<div style="margin-top:8px"><b>Sources used:</b> ${sources.slice(0,10).map(s=>{
+    const u=String(s?.url||''); const t=String(s?.title||u);
+    return u?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`:'';
+  }).filter(Boolean).join(' • ')}</div>`;
+}
+async function phaseAllocRunOnlineAdvice(){
+  const fy=d.selectedFY||getFY()?.label||'';
+  const q=phaseAllocQuarterForDate();
+  const cfg=phaseAllocAdviserConfig();
+  const endpoint=String(cfg.endpoint||'').trim();
+  if(!endpoint){
+    alert('Secure adviser is not connected. Open “Secure adviser connection” below the Allocation Guidance table and save your adviser endpoint.');
+    return;
+  }
+  const btn=document.getElementById('vmgAdviseTargetBtn');
+  if(btn){btn.disabled=true;btn.textContent='🌐 Reviewing market…';}
+  try{
+    const headers={'Content-Type':'application/json'};
+    if(cfg.token)headers.Authorization='Bearer '+cfg.token;
+    const response=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(phaseAllocAdviserPayload(fy))});
+    const raw=await response.text();
+    let result; try{result=JSON.parse(raw);}catch{throw new Error('Adviser returned invalid JSON.');}
+    if(!response.ok)throw new Error(result?.error||('Adviser endpoint returned HTTP '+response.status));
+    const targets={};
+    VMG_ALLOC_ASSETS.forEach(a=>{
+      if(a.control==='auto' || a.key==='APY'){targets[a.key]=0;return;}
+      const v=Number(result?.advisedTargets?.[a.key]);
+      if(!Number.isFinite(v))throw new Error('Missing advised target for '+a.key);
+      targets[a.key]=Math.max(0,Math.min(100,v));
+    });
+    const sum=VMG_ALLOC_ASSETS.filter(a=>a.control!=='auto' && a.key!=='APY').reduce((n,a)=>n+targets[a.key],0);
+    if(Math.abs(sum-100)>0.05)throw new Error('Adviser returned '+sum.toFixed(2)+'% instead of 100% across controllable assets.');
+    const key=phaseAllocQuarterKey(fy,q);
+    if(!d.allocationQuarterlyAdvice)d.allocationQuarterlyAdvice={};
+    d.allocationQuarterlyAdvice[key]={fy,quarter:q,reviewedOn:result.reviewedOn||new Date().toISOString().slice(0,10),marketScenario:String(result.marketScenario||'Current market review'),advisedTargets:targets,notes:String(result.notes||''),confidence:String(result.confidence||'Moderate'),sources:Array.isArray(result.sources)?result.sources:[],online:true};
+    save(); render();
+    alert('Quarterly advice updated for '+fy+' — '+q+'. Your editable Target % was not changed.');
+  }catch(err){
+    console.error(err);
+    alert('Online market review failed: '+err.message);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔄 ADVISE TARGET %';}
+  }
+}
+function phaseAllocQuarterlyReviewPanel(fy){
+  const q=phaseAllocQuarterForDate();
+  const key=phaseAllocQuarterKey(fy,q);
+  const rec=d.allocationQuarterlyAdvice?.[key];
+  const history=Object.values(d.allocationQuarterlyAdvice||{}).filter(x=>x&&x.fy===fy).sort((a,b)=>String(a.reviewedOn).localeCompare(String(b.reviewedOn)));
+  const cfg=phaseAllocAdviserConfig();
+  return `<div class="notice" style="margin-top:10px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span><b>Current review:</b> ${esc(q)} • ${esc(new Date().toISOString().slice(0,10))}</span>
+      <span><b>Status:</b> ${rec?.online?'✅ Reviewed online':'🔔 Review due / saved baseline'}</span>
+      ${rec?.confidence?`<span><b>Confidence:</b> ${esc(rec.confidence)}</span>`:''}
+    </div>
+    ${rec?.marketScenario?`<div style="margin-top:7px"><b>Market scenario:</b> ${esc(rec.marketScenario)}</div>`:''}
+    ${rec?.notes?`<div style="margin-top:4px"><b>Review note:</b> ${esc(rec.notes)}</div>`:''}
+    ${rec?.sources?phaseAllocAdviceRenderSources(rec.sources):''}
+    ${history.length?`<div style="margin-top:7px"><b>Quarter history:</b> ${history.map(x=>esc(x.quarter)+' — '+esc(x.reviewedOn||'')).join(' | ')}</div>`:''}
+    <details style="margin-top:7px"><summary>Secure adviser connection</summary><div style="margin-top:6px">
+      <input id="vmgAdviserEndpoint" type="url" style="width:min(680px,100%)" placeholder="https://your-vmg-adviser.workers.dev" value="${esc(cfg.endpoint||'')}">
+      <input id="vmgAdviserToken" type="password" style="width:min(360px,100%);margin-left:6px" placeholder="Optional access token" value="${esc(cfg.token||'')}">
+      <button class="btn" type="button" onclick="phaseAllocAdviserSetConfig(document.getElementById('vmgAdviserEndpoint').value,document.getElementById('vmgAdviserToken').value);alert('Secure adviser connection saved on this browser.')">Save connection</button>
+      <div style="margin-top:5px">The HTML never stores an OpenAI API key. The secure backend keeps that secret server-side. Use HTTPS and, preferably, an access token for this private endpoint.</div>
+    </div></details>
+  </div>`;
+}
+
+function phaseAllocFundTypeStore(){
+  phaseAllocEnsure();
+  if(!d.allocationFundTypes || typeof d.allocationFundTypes!=="object" || Array.isArray(d.allocationFundTypes)) d.allocationFundTypes={};
+  VMG_ALLOC_ASSETS.forEach(a=>{
+    const v=String(d.allocationFundTypes[a.key]||VMG_ALLOC_DEFAULT_TYPES[a.key]||"Debt Fund");
+    d.allocationFundTypes[a.key]=VMG_ALLOC_FUND_TYPES.includes(v)?v:(VMG_ALLOC_DEFAULT_TYPES[a.key]||"Debt Fund");
+  });
+  return d.allocationFundTypes;
+}
+function phaseAllocSetFundType(key,value){
+  const store=phaseAllocFundTypeStore();
+  const v=VMG_ALLOC_FUND_TYPES.includes(String(value))?String(value):(VMG_ALLOC_DEFAULT_TYPES[key]||"Debt Fund");
+  store[key]=v;
+  save();
+  render();
+}
+function phaseAllocAdvisedTarget(key){
+  const fy=d.selectedFY||getFY()?.label||"";
+  const targets=phaseAllocAdvisedTargetsForCurrentQuarter(fy);
+  return Math.max(0,Math.min(100,Number(targets[key])||0));
+}
 function phaseAllocFYStart(fy){
   const m=String(fy||"").match(/(\d{4})/);
   return m?Number(m[1]):null;
@@ -14189,8 +14414,8 @@ function phaseAllocGuidance(fy){
     const corpus=Number(map[a.key])||0;
     const current=total>0?corpus/total*100:0;
     const target=Number(targets[a.key])||0;
-    let kind="neutral",label="→ Neutral";
-    if(a.control==="employer"){kind="auto";label="AUTO";}
+    let kind="neutral",label="→ Maintain";
+    if(a.control==="employer" || a.control==="auto"){kind="auto";label="AUTO";}
     else if(current < target-1){kind="up";label="↑ Increase";}
     else if(current > target+1){kind="down";label="↓ Reduce";}
     return {...a,corpus,current,target,kind,label};
@@ -14207,33 +14432,55 @@ function phaseAllocActionSummary(rows){
   return chip("up","↑ Increase",up)+chip("down","↓ Reduce new allocation",down)+chip("","→ Maintain",neutral)+chip("auto","🔵 AUTO",auto);
 }
 function phase700AllocationGuidance(fy){
+  const qAdvice=phaseAllocEnsureQuarterly();
   const g=phaseAllocGuidance(fy);
+  const fundTypes=phaseAllocFundTypeStore();
   const title=g.post?"Post-Retirement":(fy||"");
   const totalClass=Math.abs(g.targetTotal-100)<0.05?"good":g.targetTotal<100?"partial":"bad";
   const totalText=Math.abs(g.targetTotal-100)<0.05?"🟢 100% Allocated":`🟡 ${g.targetTotal.toFixed(2)}% / 100% — ${(100-g.targetTotal).toFixed(2)}% Unallocated`;
-  const rows=g.rows.map(r=>`<tr>
+  const rows=g.rows.map(r=>{
+    const advised=phaseAllocAdvisedTarget(r.key);
+    const type=String(fundTypes[r.key]||VMG_ALLOC_DEFAULT_TYPES[r.key]||"Debt Fund");
+    return `<tr>
     <td><b>${esc(r.key)}</b></td>
+    <td>
+      <select class="vmg-fund-type-select" onchange="phaseAllocSetFundType('${esc(r.key)}',this.value)" aria-label="${esc(r.key)} fund type">
+        ${VMG_ALLOC_FUND_TYPES.map(t=>`<option value="${esc(t)}" ${t===type?"selected":""}>${esc(t)}</option>`).join("")}
+      </select>
+    </td>
     <td style="text-align:center">${r.control==="employer"?"🔒 Employer":r.control==="limited"?"Limited / User":"User"}</td>
     <td class="vmg-alloc-money">₹${fmt(r.corpus)}</td>
     <td>${fmt(r.current)}%</td>
-    <td><input class="vmg-target-input" type="number" min="0" max="100" step="0.01" value="${r.target.toFixed(2)}" onchange="phaseAllocSetTarget('${esc(fy)}','${esc(r.key)}',this.value)" aria-label="${esc(r.key)} target percentage"></td>
+    <td><b class="vmg-advised-target">${advised.toFixed(2)}%</b></td>
+    <td>${r.control==="auto"?`<b class="vmg-advised-target">AUTO</b>`:`<input class="vmg-target-input" type="number" min="0" max="100" step="0.01" value="${r.target.toFixed(2)}" onchange="phaseAllocSetTarget('${esc(fy)}','${esc(r.key)}',this.value)" aria-label="${esc(r.key)} editable target percentage">`}</td>
     <td class="vmg-alloc-money">₹${fmt(g.total*r.target/100)}</td>
     <td><span class="vmg-alloc-guidance vmg-alloc-${r.kind}">${r.label}</span></td>
-  </tr>`).join("");
+  </tr>`;
+  }).join("");
   const totalTargetAmount=g.total*g.targetTotal/100;
+  const totalAdvisedTarget=g.rows.reduce((sum,r)=>sum+phaseAllocAdvisedTarget(r.key),0);
+  const totalCurrentPct=g.total>0?g.rows.reduce((sum,r)=>sum+r.current,0):0;
+  const totalGuidance=Math.abs(g.targetTotal-100)<0.05?"🟢 100% Allocated":`🟡 ${g.targetTotal.toFixed(2)}% / 100%`;
+  const totalRow=`<tr class="vmg-alloc-table-total">
+    <td><b>TOTAL</b></td>
+    <td></td>
+    <td></td>
+    <td class="vmg-alloc-money"><b>₹${fmt(g.total)}</b></td>
+    <td><b>${totalCurrentPct.toFixed(2)}%</b></td>
+    <td><b class="vmg-advised-target">${totalAdvisedTarget.toFixed(2)}%</b></td>
+    <td><b>${g.targetTotal.toFixed(2)}%</b></td>
+    <td class="vmg-alloc-money"><b>₹${fmt(totalTargetAmount)}</b></td>
+    <td><b>${totalGuidance}</b></td>
+  </tr>`;
   return `<div class="card vmg-allocation-card">
-    <h2>🎯 Allocation Guidance — ${esc(title)}</h2>
-    <div class="notice">Target % is your editable planning assumption. <b>Current % is calculated from Active Principal only</b> using the authoritative Current Investment Summary corpus. Target Amount is Total Active Principal × Target %. <b>↓ means reduce new allocation, not sell existing holdings.</b> Employer-controlled EPF / EPS and Superannuation are shown as AUTO.</div>
-    <div style="overflow:auto"><table class="vmg-alloc-table"><thead><tr><th>Asset</th><th>Control</th><th>Active Principal ₹</th><th>Current %</th><th>Target %</th><th>Target Amount ₹</th><th>Guidance</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div class="vmg-alloc-total ${totalClass}">
-      <span><b>Total Current Active Principal:</b> ₹${fmt(g.total)}</span>
-      <span><b>Total Target Amount:</b> ₹${fmt(totalTargetAmount)}</span>
-      <span><b>Current %:</b> ${g.total>0?"100.00":"0.00"}%</span>
-      <span><b>Target %:</b> ${g.targetTotal.toFixed(2)}% / 100%</span>
-      <span>${totalText}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px">
+      <h2 style="margin:0">🎯 Allocation Guidance — ${esc(title)}</h2>
+      <button id="vmgAdviseTargetBtn" class="btn primary" type="button" onclick="phaseAllocRunOnlineAdvice()" style="font-size:15px;padding:10px 18px;white-space:nowrap">🔄 ADVISE TARGET %</button>
     </div>
-    <div class="vmg-alloc-actions">${phaseAllocActionSummary(g.rows)}</div>
-    <div class="vmg-alloc-note">Active Principal and Current % come from the authoritative current investment corpus for all members. Interest is deliberately excluded from allocation percentages. Target Amount is calculated from the same Total Active Principal, so a 100% target total reconciles exactly to the current active principal.</div>
+    <div class="notice">Fund Type is user-selectable as <b>Debt Fund / Equity Fund / Hybrid Fund / Liquid Fund</b>. <b>Advised Target %</b> is the current-quarter recommendation for your age/service horizon and prevailing market scenario. The existing <b>Target %</b> remains fully editable (except fixed AUTO assets) and is the actual planning assumption used for Target Amount and Guidance. Current % is calculated from Active Principal only. <b>↓ means reduce new allocation, not sell existing holdings.</b> APY is fixed and shown as AUTO; employer-controlled EPF / EPS and Superannuation are also AUTO. “Maintain” is used wherever no increase/reduction is advised. <b>Quarterly review:</b> ${esc(qAdvice.quarter)} — ${esc(qAdvice.reviewedOn)}. Advice is stored by FY + quarter so Apr-Jun, Jul-Sep, Oct-Dec and Jan-Mar reviews remain separately captured.</div>
+    ${phaseAllocQuarterlyReviewPanel(fy)}
+    <div style="overflow:auto"><table class="vmg-alloc-table"><thead><tr><th>Asset</th><th>Type of Fund</th><th>Control</th><th>Active Principal ₹</th><th>Current %</th><th>Advised Target %</th><th>Target %<br><small>Editable</small></th><th>Target Amount ₹</th><th>Guidance</th></tr></thead><tbody>${rows}${totalRow}</tbody></table></div>
+
   </div>`;
 }
 
@@ -15146,15 +15393,6 @@ function phase700IncomeSummaryCards(fy){
       <div class="stat" style="padding:8px 10px;min-height:0"><small>TDS Paid — Salary Executed Till Date</small><b style="font-size:20px;margin-top:2px">₹${taxPaidTillExecuted.has?fmt(taxPaidTillExecuted.value):"—"}</b><span style="display:block;margin-top:3px;font-size:10px;color:#667085">Only salary months marked <b>Received / Executed</b> are included.</span></div>
     </div>
   </div>
-  <div class="card">
-    <h2>Interest — Member-wise</h2>
-    <div class="notice">Black = <b>Total Interest received / accrued for the FY</b>. Red = <b>ITR amount to be considered for taxable income</b>, which is only a subset of the member's total and is not added again.</div>
-    <div class="grid" style="margin-top:8px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Vijay</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Vijay||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Vijay||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Vijay||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Vijay||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Sweta</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Sweta||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Sweta||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Sweta||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Sweta||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Rashi</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.totalBy.Rashi||0)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedBy.Rashi||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrBy.Rashi||0)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrBy.Rashi||0)}</span></div>
-      <div class="stat" style="padding:7px 9px;min-height:0"><small style="font-size:12px">Total Interest</small><b style="font-size:17px;margin-top:3px">₹${fmt(itr.total)}</b><span style="display:block;margin-top:2px;font-size:10.5px;color:#475467">Expected FY: ₹${fmt(itr.expectedTotal||0)}</span><span style="display:block;margin-top:2px;font-size:11px;font-weight:700;color:#dc2626">ITR: ₹${fmt(itr.itrTotal)}</span><span style="display:block;margin-top:2px;font-size:10.5px;font-weight:700;color:#b42318">Expected ITR: ₹${fmt(itr.expectedItrTotal||0)}</span></div>
-    </div>
   </div>`;
 }
 
