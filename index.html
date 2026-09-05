@@ -14122,109 +14122,6 @@ function phaseAllocAdvisedTargetsForCurrentQuarter(fy){
   return saved?.advisedTargets || VMG_ALLOC_ADVISED_TARGETS;
 }
 
-/* ==================== ONLINE QUARTERLY TARGET ADVISER ====================
-   Long-life design: the browser determines the current FY/quarter from the
-   system date. The actual market review is delegated to a secure backend/API
-   so API keys are never embedded in this GitHub Pages HTML. The endpoint is
-   user-configurable and its result is stored permanently by FY + quarter.
-*/
-const VMG_ALLOC_ADVISER_CONFIG_KEY='vmgAllocationAdviserConfigV2';
-function phaseAllocAdviserConfig(){
-  try{ return JSON.parse(localStorage.getItem(VMG_ALLOC_ADVISER_CONFIG_KEY)||'{}')||{}; }catch(e){ return {}; }
-}
-function phaseAllocAdviserSetConfig(url,token){
-  const cfg=phaseAllocAdviserConfig();
-  cfg.endpoint=String(url||'').trim();
-  cfg.token=String(token||'').trim();
-  localStorage.setItem(VMG_ALLOC_ADVISER_CONFIG_KEY,JSON.stringify(cfg));
-}
-function phaseAllocAdviserPayload(fy){
-  const g=phaseAllocGuidance(fy);
-  const q=phaseAllocQuarterForDate();
-  const key=phaseAllocQuarterKey(fy,q);
-  const previous=d.allocationQuarterlyAdvice?.[key]||null;
-  return {
-    requestType:'VMG_ALLOCATION_QUARTERLY_REVIEW',
-    asOf:new Date().toISOString(), fy, quarter:q,
-    investor:{retirementAge:58,planningHorizonYears:9},
-    assets:g.rows.map(r=>({asset:r.key,control:r.control,currentPct:Number(r.current.toFixed(4)),activePrincipal:Number(r.corpus||0),fundType:phaseAllocFundTypeStore()[r.key]||VMG_ALLOC_DEFAULT_TYPES[r.key],currentTargetPct:Number(r.target||0),fixed:r.control==='auto'})),
-    previousAdvice:previous,
-    constraints:{appliedToNewAllocationOnly:true,apy:'AUTO',autoAssets:['EPF / EPS','Superannuation','APY'],maintainLabel:'Maintain'},
-    requestedSources:['SEBI','AMFI','RBI','EPFO','PFRDA','NSE/BSE','official issuer sources','Reuters','Economic Times','Mint','Moneycontrol'],
-    output:{advisedTargets:'object keyed by asset, total 100 across controllable assets; AUTO assets 0',marketScenario:'string',notes:'string',confidence:'High|Moderate|Low',sources:'array of title,url,why',reviewedOn:'YYYY-MM-DD'}
-  };
-}
-function phaseAllocAdviceRenderSources(sources){
-  if(!Array.isArray(sources)||!sources.length)return '';
-  return `<div style="margin-top:8px"><b>Sources used:</b> ${sources.slice(0,10).map(s=>{
-    const u=String(s?.url||''); const t=String(s?.title||u);
-    return u?`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`:'';
-  }).filter(Boolean).join(' • ')}</div>`;
-}
-async function phaseAllocRunOnlineAdvice(){
-  const fy=d.selectedFY||getFY()?.label||'';
-  const q=phaseAllocQuarterForDate();
-  const cfg=phaseAllocAdviserConfig();
-  const endpoint=String(cfg.endpoint||'').trim();
-  if(!endpoint){
-    alert('Secure adviser is not connected. Open “Secure adviser connection” below the Allocation Guidance table and save your adviser endpoint.');
-    return;
-  }
-  const btn=document.getElementById('vmgAdviseTargetBtn');
-  if(btn){btn.disabled=true;btn.textContent='🌐 Reviewing market…';}
-  try{
-    const headers={'Content-Type':'application/json'};
-    if(cfg.token)headers.Authorization='Bearer '+cfg.token;
-    const response=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(phaseAllocAdviserPayload(fy))});
-    const raw=await response.text();
-    let result; try{result=JSON.parse(raw);}catch{throw new Error('Adviser returned invalid JSON.');}
-    if(!response.ok)throw new Error(result?.error||('Adviser endpoint returned HTTP '+response.status));
-    const targets={};
-    VMG_ALLOC_ASSETS.forEach(a=>{
-      if(a.control==='auto' || a.key==='APY'){targets[a.key]=0;return;}
-      const v=Number(result?.advisedTargets?.[a.key]);
-      if(!Number.isFinite(v))throw new Error('Missing advised target for '+a.key);
-      targets[a.key]=Math.max(0,Math.min(100,v));
-    });
-    const sum=VMG_ALLOC_ASSETS.filter(a=>a.control!=='auto' && a.key!=='APY').reduce((n,a)=>n+targets[a.key],0);
-    if(Math.abs(sum-100)>0.05)throw new Error('Adviser returned '+sum.toFixed(2)+'% instead of 100% across controllable assets.');
-    const key=phaseAllocQuarterKey(fy,q);
-    if(!d.allocationQuarterlyAdvice)d.allocationQuarterlyAdvice={};
-    d.allocationQuarterlyAdvice[key]={fy,quarter:q,reviewedOn:result.reviewedOn||new Date().toISOString().slice(0,10),marketScenario:String(result.marketScenario||'Current market review'),advisedTargets:targets,notes:String(result.notes||''),confidence:String(result.confidence||'Moderate'),sources:Array.isArray(result.sources)?result.sources:[],online:true};
-    save(); render();
-    alert('Quarterly advice updated for '+fy+' — '+q+'. Your editable Target % was not changed.');
-  }catch(err){
-    console.error(err);
-    alert('Online market review failed: '+err.message);
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent='🔄 ADVISE TARGET %';}
-  }
-}
-function phaseAllocQuarterlyReviewPanel(fy){
-  const q=phaseAllocQuarterForDate();
-  const key=phaseAllocQuarterKey(fy,q);
-  const rec=d.allocationQuarterlyAdvice?.[key];
-  const history=Object.values(d.allocationQuarterlyAdvice||{}).filter(x=>x&&x.fy===fy).sort((a,b)=>String(a.reviewedOn).localeCompare(String(b.reviewedOn)));
-  const cfg=phaseAllocAdviserConfig();
-  return `<div class="notice" style="margin-top:10px">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span><b>Current review:</b> ${esc(q)} • ${esc(new Date().toISOString().slice(0,10))}</span>
-      <span><b>Status:</b> ${rec?.online?'✅ Reviewed online':'🔔 Review due / saved baseline'}</span>
-      ${rec?.confidence?`<span><b>Confidence:</b> ${esc(rec.confidence)}</span>`:''}
-    </div>
-    ${rec?.marketScenario?`<div style="margin-top:7px"><b>Market scenario:</b> ${esc(rec.marketScenario)}</div>`:''}
-    ${rec?.notes?`<div style="margin-top:4px"><b>Review note:</b> ${esc(rec.notes)}</div>`:''}
-    ${rec?.sources?phaseAllocAdviceRenderSources(rec.sources):''}
-    ${history.length?`<div style="margin-top:7px"><b>Quarter history:</b> ${history.map(x=>esc(x.quarter)+' — '+esc(x.reviewedOn||'')).join(' | ')}</div>`:''}
-    <details style="margin-top:7px"><summary>Secure adviser connection</summary><div style="margin-top:6px">
-      <input id="vmgAdviserEndpoint" type="url" style="width:min(680px,100%)" placeholder="https://your-vmg-adviser.workers.dev" value="${esc(cfg.endpoint||'')}">
-      <input id="vmgAdviserToken" type="password" style="width:min(360px,100%);margin-left:6px" placeholder="Optional access token" value="${esc(cfg.token||'')}">
-      <button class="btn" type="button" onclick="phaseAllocAdviserSetConfig(document.getElementById('vmgAdviserEndpoint').value,document.getElementById('vmgAdviserToken').value);alert('Secure adviser connection saved on this browser.')">Save connection</button>
-      <div style="margin-top:5px">The HTML never stores an OpenAI API key. The secure backend keeps that secret server-side. Use HTTPS and, preferably, an access token for this private endpoint.</div>
-    </div></details>
-  </div>`;
-}
-
 function phaseAllocFundTypeStore(){
   phaseAllocEnsure();
   if(!d.allocationFundTypes || typeof d.allocationFundTypes!=="object" || Array.isArray(d.allocationFundTypes)) d.allocationFundTypes={};
@@ -14323,6 +14220,7 @@ function phaseAllocSetTarget(fy,key,value){
   }
   store[key]=Math.round(next*10)/10;
   save();
+  render();
 }
 function phase700ProjectedInvestmentMap(fy,member){
   /*
@@ -14431,23 +14329,106 @@ function phaseAllocActionSummary(rows){
   const chip=(cls,title,arr)=>arr.length?`<span class="vmg-alloc-action ${cls}"><b>${title}:</b> ${arr.map(esc).join(", ")}</span>`:"";
   return chip("up","↑ Increase",up)+chip("down","↓ Reduce new allocation",down)+chip("","→ Maintain",neutral)+chip("auto","🔵 AUTO",auto);
 }
+/* ==================== LOCAL QUARTERLY TARGET ADVISER ====================
+   Free/offline planning adviser. No OpenAI API, Cloudflare Worker, access
+   token or external service is used. Advice is deterministic and stored by
+   FY + quarter.
+*/
+function phaseAllocLocalAdviceTargets(fy){
+  const base=phaseAllocIsPostRetirement(fy)
+    ? phaseAllocPostRetirementDefaults()
+    : (phaseAllocFYStart(fy)===2026 ? {...VMG_ALLOC_ADVISED_TARGETS} : {...phaseAllocDefaultForFY(fy)});
+  const targets={...base};
+  const horizon=Math.max(0,phaseAllocRetirementFYStart()-phaseAllocFYStart(fy));
+  const g=phaseAllocGuidance(fy);
+  const current=Object.fromEntries(g.rows.map(r=>[r.key,Number(r.current)||0]));
+
+  if(!phaseAllocIsPostRetirement(fy) && horizon<=5){
+    const shift=Math.min(4,Math.max(0,6-horizon));
+    targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift);
+    targets['FD']=(targets['FD']||0)+Math.ceil(shift*0.75);
+    targets['PPF']=(targets['PPF']||0)+(shift-Math.ceil(shift*0.75));
+  }
+
+  const controllable=['PPF','FD','Mutual Fund','AltGraff','NCD','NPS','LIC'];
+  const overweight=controllable.filter(k=>current[k]>Number(targets[k]||0)+8);
+  if(overweight.length){
+    let shift=0;
+    overweight.forEach(k=>{
+      const excess=Math.min(2,Math.max(0,current[k]-Number(targets[k]||0)-8));
+      targets[k]=Math.max(0,(targets[k]||0)-excess);
+      shift+=excess;
+    });
+    targets['FD']=(targets['FD']||0)+shift;
+  }
+
+  VMG_ALLOC_ASSETS.forEach(a=>{ if(a.control==='auto' || a.key==='APY') targets[a.key]=0; });
+  const keys=VMG_ALLOC_ASSETS.filter(a=>a.control!=='auto' && a.key!=='APY').map(a=>a.key);
+  let sum=keys.reduce((n,k)=>n+Math.max(0,Number(targets[k])||0),0);
+  if(sum<=0){ keys.forEach(k=>targets[k]=0); targets['FD']=100; }
+  else if(Math.abs(sum-100)>0.001){
+    const factor=100/sum; keys.forEach(k=>targets[k]=Math.max(0,(Number(targets[k])||0)*factor));
+  }
+  const rounded=keys.reduce((n,k)=>n+Number(Number(targets[k]).toFixed(2)),0);
+  const delta=Number((100-rounded).toFixed(2));
+  if(delta) targets[keys[keys.length-1]]=Number((Number(targets[keys[keys.length-1]])+delta).toFixed(2));
+  return targets;
+}
+function phaseAllocRunLocalAdvice(){
+  const fy=d.selectedFY||getFY()?.label||'';
+  const q=phaseAllocQuarterForDate();
+  const btn=document.getElementById('vmgAdviseTargetBtn');
+  if(btn){btn.disabled=true;btn.textContent='⚙️ Calculating…';}
+  try{
+    const targets=phaseAllocLocalAdviceTargets(fy);
+    const key=phaseAllocQuarterKey(fy,q);
+    if(!d.allocationQuarterlyAdvice)d.allocationQuarterlyAdvice={};
+    d.allocationQuarterlyAdvice[key]={
+      fy,quarter:q,reviewedOn:new Date().toISOString().slice(0,10),
+      marketScenario:'Local VMG planning review',advisedTargets:targets,
+      notes:'Rule-based local review using active principal, retirement horizon and the VMG lifecycle baseline. No external market/API call was made. ↓ means reduce new allocation, not sell existing holdings.',
+      confidence:'Planning baseline',online:false
+    };
+    save(); render();
+    alert('Quarterly VMG advice updated locally for '+fy+' — '+q+'. No OpenAI/API call or payment was used. Your editable Target % was not changed.');
+  }catch(err){
+    console.error(err);
+    alert('Local adviser calculation failed: '+err.message);
+  }finally{
+    const b=document.getElementById('vmgAdviseTargetBtn');
+    if(b){b.disabled=false;b.textContent='🎯 ADVISE TARGET %';}
+  }
+}
+function phaseAllocQuarterlyReviewPanel(fy){
+  const q=phaseAllocQuarterForDate();
+  const key=phaseAllocQuarterKey(fy,q);
+  const rec=d.allocationQuarterlyAdvice?.[key];
+  const history=Object.values(d.allocationQuarterlyAdvice||{}).filter(x=>x&&x.fy===fy).sort((a,b)=>String(a.reviewedOn).localeCompare(String(b.reviewedOn)));
+  return `<div class="notice" style="margin-top:10px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span><b>Current review:</b> ${esc(q)} • ${esc(new Date().toISOString().slice(0,10))}</span>
+      <span><b>Status:</b> ${rec?.online?'Reviewed online':'Local / saved baseline'}</span>
+    </div>
+    ${rec?.marketScenario?`<div style="margin-top:7px"><b>Review type:</b> ${esc(rec.marketScenario)}</div>`:''}
+    ${rec?.notes?`<div style="margin-top:4px"><b>Review note:</b> ${esc(rec.notes)}</div>`:''}
+    ${history.length?`<div style="margin-top:7px"><b>Quarter history:</b> ${history.map(x=>esc(x.quarter)+' — '+esc(x.reviewedOn||'')).join(' | ')}</div>`:''}
+    <div style="margin-top:9px;font-size:12px;color:#475569">No OpenAI API, Cloudflare Worker, access token or paid service is required for this adviser.</div>
+  </div>`;
+}
+
 function phase700AllocationGuidance(fy){
   const qAdvice=phaseAllocEnsureQuarterly();
   const g=phaseAllocGuidance(fy);
   const fundTypes=phaseAllocFundTypeStore();
   const title=g.post?"Post-Retirement":(fy||"");
-  const totalClass=Math.abs(g.targetTotal-100)<0.05?"good":g.targetTotal<100?"partial":"bad";
-  const totalText=Math.abs(g.targetTotal-100)<0.05?"🟢 100% Allocated":`🟡 ${g.targetTotal.toFixed(2)}% / 100% — ${(100-g.targetTotal).toFixed(2)}% Unallocated`;
   const rows=g.rows.map(r=>{
     const advised=phaseAllocAdvisedTarget(r.key);
     const type=String(fundTypes[r.key]||VMG_ALLOC_DEFAULT_TYPES[r.key]||"Debt Fund");
     return `<tr>
     <td><b>${esc(r.key)}</b></td>
-    <td>
-      <select class="vmg-fund-type-select" onchange="phaseAllocSetFundType('${esc(r.key)}',this.value)" aria-label="${esc(r.key)} fund type">
-        ${VMG_ALLOC_FUND_TYPES.map(t=>`<option value="${esc(t)}" ${t===type?"selected":""}>${esc(t)}</option>`).join("")}
-      </select>
-    </td>
+    <td><select class="vmg-fund-type-select" onchange="phaseAllocSetFundType('${esc(r.key)}',this.value)" aria-label="${esc(r.key)} fund type">
+      ${VMG_ALLOC_FUND_TYPES.map(t=>`<option value="${esc(t)}" ${t===type?"selected":""}>${esc(t)}</option>`).join("")}
+    </select></td>
     <td style="text-align:center">${r.control==="employer"?"🔒 Employer":r.control==="limited"?"Limited / User":"User"}</td>
     <td class="vmg-alloc-money">₹${fmt(r.corpus)}</td>
     <td>${fmt(r.current)}%</td>
@@ -14461,26 +14442,15 @@ function phase700AllocationGuidance(fy){
   const totalAdvisedTarget=g.rows.reduce((sum,r)=>sum+phaseAllocAdvisedTarget(r.key),0);
   const totalCurrentPct=g.total>0?g.rows.reduce((sum,r)=>sum+r.current,0):0;
   const totalGuidance=Math.abs(g.targetTotal-100)<0.05?"🟢 100% Allocated":`🟡 ${g.targetTotal.toFixed(2)}% / 100%`;
-  const totalRow=`<tr class="vmg-alloc-table-total">
-    <td><b>TOTAL</b></td>
-    <td></td>
-    <td></td>
-    <td class="vmg-alloc-money"><b>₹${fmt(g.total)}</b></td>
-    <td><b>${totalCurrentPct.toFixed(2)}%</b></td>
-    <td><b class="vmg-advised-target">${totalAdvisedTarget.toFixed(2)}%</b></td>
-    <td><b>${g.targetTotal.toFixed(2)}%</b></td>
-    <td class="vmg-alloc-money"><b>₹${fmt(totalTargetAmount)}</b></td>
-    <td><b>${totalGuidance}</b></td>
-  </tr>`;
+  const totalRow=`<tr class="vmg-alloc-table-total"><td><b>TOTAL</b></td><td></td><td></td><td class="vmg-alloc-money"><b>₹${fmt(g.total)}</b></td><td><b>${totalCurrentPct.toFixed(2)}%</b></td><td><b class="vmg-advised-target">${totalAdvisedTarget.toFixed(2)}%</b></td><td><b>${g.targetTotal.toFixed(2)}%</b></td><td class="vmg-alloc-money"><b>₹${fmt(totalTargetAmount)}</b></td><td><b>${totalGuidance}</b></td></tr>`;
   return `<div class="card vmg-allocation-card">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:8px">
       <h2 style="margin:0">🎯 Allocation Guidance — ${esc(title)}</h2>
-      <button id="vmgAdviseTargetBtn" class="btn primary" type="button" onclick="phaseAllocRunOnlineAdvice()" style="font-size:15px;padding:10px 18px;white-space:nowrap">🔄 ADVISE TARGET %</button>
+      <button id="vmgAdviseTargetBtn" class="btn primary" type="button" onclick="phaseAllocRunLocalAdvice()" style="font-size:15px;padding:10px 18px;white-space:nowrap">🎯 ADVISE TARGET %</button>
     </div>
-    <div class="notice">Fund Type is user-selectable as <b>Debt Fund / Equity Fund / Hybrid Fund / Liquid Fund</b>. <b>Advised Target %</b> is the current-quarter recommendation for your age/service horizon and prevailing market scenario. The existing <b>Target %</b> remains fully editable (except fixed AUTO assets) and is the actual planning assumption used for Target Amount and Guidance. Current % is calculated from Active Principal only. <b>↓ means reduce new allocation, not sell existing holdings.</b> APY is fixed and shown as AUTO; employer-controlled EPF / EPS and Superannuation are also AUTO. “Maintain” is used wherever no increase/reduction is advised. <b>Quarterly review:</b> ${esc(qAdvice.quarter)} — ${esc(qAdvice.reviewedOn)}. Advice is stored by FY + quarter so Apr-Jun, Jul-Sep, Oct-Dec and Jan-Mar reviews remain separately captured.</div>
-    ${phaseAllocQuarterlyReviewPanel(fy)}
+    <div class="notice">Fund Type is user-selectable as <b>Debt Fund / Equity Fund / Hybrid Fund / Liquid Fund</b>. <b>Advised Target %</b> is a local VMG planning recommendation based on active-principal allocation, retirement horizon and the VMG lifecycle baseline. <b>No external API or paid service is used.</b> The existing <b>Target %</b> remains fully editable (except fixed AUTO assets) and is the actual planning assumption used for Target Amount and Guidance. Current % is calculated from Active Principal only. <b>↓ means reduce new allocation, not sell existing holdings.</b> APY is fixed as AUTO; employer-controlled EPF / EPS and Superannuation are also AUTO. Advice is stored by FY + quarter.</div>
     <div style="overflow:auto"><table class="vmg-alloc-table"><thead><tr><th>Asset</th><th>Type of Fund</th><th>Control</th><th>Active Principal ₹</th><th>Current %</th><th>Advised Target %</th><th>Target %<br><small>Editable</small></th><th>Target Amount ₹</th><th>Guidance</th></tr></thead><tbody>${rows}${totalRow}</tbody></table></div>
-
+    ${phaseAllocQuarterlyReviewPanel(fy)}
   </div>`;
 }
 
