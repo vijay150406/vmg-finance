@@ -4736,17 +4736,29 @@ function phase523AutoExecuteMonth(fy,month){
   ensure54Arrays();
   const contributionMonth=phase541NextContributionMonth(month);
   if(!contributionMonth)return;
-  const target=phase54PostingContext(fy,contributionMonth);
+
+  // Investment Planning follows the true Apr-Mar posting FY. Therefore the
+  // Mar salary of FY 2026-27 funds the Apr-27 investment row in FY 2027-28.
+  // Do not keep Apr on the salary FY, otherwise the Apr-27 planned row can
+  // remain Planned while its Executed value stays zero.
+  const investmentFY=(String(month)==='Mar')
+    ? fyLabel(phase54FYStart(fy)+1)
+    : fy;
+  const investmentTarget=phase54PostingContext(investmentFY,contributionMonth);
+
+  // Expenses retain their existing May-Apr cash-flow FY convention.
+  const expenseTarget=phase54PostingContext(fy,contributionMonth);
+
   (d.investmentPlans||[]).filter(x=>
-    x&&x.fy===target.fy&&String(x.month)===String(contributionMonth)&&
+    x&&x.fy===investmentTarget.fy&&String(x.month)===String(contributionMonth)&&
     !String(x.id).startsWith("cf-")&&String(x.type||"").trim().toLowerCase()!=="altgraff"
-  ).filter(row=>String(row.type||"").trim().toUpperCase()!=="PPF").forEach(row=>{
+  ).forEach(row=>{
     const amount=Math.max(0,Number(row.planned)||0);
     row.autoExecuted=true; row.autoExecutionSalaryMonth=String(month); row.autoExecutionSalaryFY=String(fy);
     row.executed=amount>0; row.actualAmount=amount;
     phase54PostLedger("investment",row); phase54PostMutualFund(row); phase54PostPPF(row); phase54PostNPS(row); phase54PostAPY(row); phase54PostFD(row); phase54PostNCD(row);
   });
-  (d.expensePlans||[]).filter(x=>x&&x.fy===target.fy&&String(x.month)===String(contributionMonth)&&!String(x.id).startsWith("ex-")).forEach(row=>{
+  (d.expensePlans||[]).filter(x=>x&&x.fy===expenseTarget.fy&&String(x.month)===String(contributionMonth)&&!String(x.id).startsWith("ex-")).forEach(row=>{
     row.autoExecuted=true; row.autoExecutionSalaryMonth=String(month); row.autoExecutionSalaryFY=String(fy); row.executed=true; row.actualAmount=Number(row.planned)||0; phase57SyncExpenseLedger(row);
   });
 }
@@ -4784,6 +4796,37 @@ function phase633SyncAltGraffSalaryExecution(fy){
   if(changed)saveDataNoToast();
 }
 
+function phase523ReconcileAllSavedSalaryExecutions(){
+  // Authoritative reconciliation: a saved Salary Received flag executes the
+  // investment plan for the corresponding posting month, including an
+  // Apr-Mar FY rollover (Mar salary -> Apr investment in the next FY).
+  // This makes reopening/switching FY deterministic; it does not require the
+  // user to click the salary checkbox again. AltGraff remains excluded.
+  ensure54Arrays();
+  let changed=false;
+  (d.investmentPlans||[]).forEach(row=>{
+    if(!row || String(row.id||'').startsWith('cf-'))return;
+    if(String(row.type||'').trim().toLowerCase()==='altgraff')return;
+    const fy=String(row.fy||''); const month=String(row.month||'');
+    if(!fy || !month)return;
+    const ctx=phase54PostingContext(fy,month);
+    const received=phase54SalaryReceived(ctx.salaryFY,ctx.salaryMonth);
+    const amount=Math.max(0,Number(row.planned)||0);
+    if(received && amount>0){
+      if(row.executed!==true || Number(row.actualAmount||0)!==amount || row.autoExecuted!==true || String(row.autoExecutionSalaryMonth||'')!==String(ctx.salaryMonth) || String(row.autoExecutionSalaryFY||'')!==String(ctx.salaryFY)){
+        row.executed=true; row.actualAmount=amount; row.autoExecuted=true;
+        row.autoExecutionSalaryMonth=String(ctx.salaryMonth); row.autoExecutionSalaryFY=String(ctx.salaryFY);
+        phase54PostLedger('investment',row);
+        phase54PostMutualFund(row); phase54PostPPF(row); phase54PostNPS(row);
+        phase54PostAPY(row); phase54PostFD(row); phase54PostNCD(row);
+        changed=true;
+      }
+    }
+  });
+  if(changed)saveDataNoToast();
+  return changed;
+}
+
 function phase523SyncAllSalaryExecutions(fy){
   ensure54Arrays();
   // AltGraff is NOT salary-linked. Its actual execution is recorded only
@@ -4796,13 +4839,14 @@ function phase523SyncAllSalaryExecutions(fy){
   received.forEach(r=>{
     const contributionMonth=phase541NextContributionMonth(r.month);
     if(!contributionMonth)return;
+    const investmentFY=(String(r.month)==='Mar') ? fyLabel(phase54FYStart(fy)+1) : fy;
     const before=(d.investmentPlans||[]).filter(x=>
-      x&&x.fy===fy&&String(x.month)===String(contributionMonth)&&
+      x&&x.fy===investmentFY&&String(x.month)===String(contributionMonth)&&
       !String(x.id).startsWith("cf-")&&Number(x.planned||0)>0
     ).map(x=>`${x.id}:${x.executed}:${x.actualAmount}`).join("|");
     phase523AutoExecuteMonth(fy,r.month);
     const after=(d.investmentPlans||[]).filter(x=>
-      x&&x.fy===fy&&String(x.month)===String(contributionMonth)&&
+      x&&x.fy===investmentFY&&String(x.month)===String(contributionMonth)&&
       !String(x.id).startsWith("cf-")&&Number(x.planned||0)>0
     ).map(x=>`${x.id}:${x.executed}:${x.actualAmount}`).join("|");
     if(before!==after)changed=true;
@@ -4820,13 +4864,15 @@ function toggle54Salary(fy,month,val){
   phase54PostSuper(fy,month);
 
   const contributionMonth=phase541NextContributionMonth(month);
+  const investmentFY=(String(month)==='Mar') ? fyLabel(phase54FYStart(fy)+1) : fy;
 
   if(val){
     phase523AutoExecuteMonth(fy,month);
     phase574SyncAPYFromSalary(fy);
   }else if(contributionMonth){
     // Reverse ONLY transactions that were auto-executed by this salary.
-    (d.investmentPlans||[]).filter(x=>x&&x.fy===fy&&String(x.month)===String(contributionMonth)&&x.autoExecuted&&(
+    // Mar salary reversals must target the following FY's Apr investment row.
+    (d.investmentPlans||[]).filter(x=>x&&x.fy===investmentFY&&String(x.month)===String(contributionMonth)&&x.autoExecuted&&(
       String(x.autoExecutionSalaryMonth||"")===String(month) ||
       !x.autoExecutionSalaryMonth
     )).forEach(x=>{
@@ -4839,7 +4885,8 @@ function toggle54Salary(fy,month,val){
       phase54PostMutualFund(x);phase54PostPPF(x);phase54PostNPS(x);phase54PostAPY(x);phase54PostFD(x);phase54PostNCD(x);
     });
 
-    (d.expensePlans||[]).filter(x=>x&&x.fy===target.fy&&String(x.month)===String(contributionMonth)&&x.autoExecuted&&(
+    const expenseTarget=phase54PostingContext(fy,contributionMonth);
+    (d.expensePlans||[]).filter(x=>x&&x.fy===expenseTarget.fy&&String(x.month)===String(contributionMonth)&&x.autoExecuted&&(
       String(x.autoExecutionSalaryMonth||"")===String(month) ||
       !x.autoExecutionSalaryMonth
     )).forEach(x=>{
@@ -5983,10 +6030,20 @@ function phase564APYExecuted(fy,member,month){
     return Math.max(0,planned);
   }
 
-  /* Normal rule: salary execution drives APY execution. */
-  const linked=(mem==="SWETA")
-    ? phase574SwetaSalaryExecutedForPosting(fy,month)
-    : phase54SalaryReceivedForPosting(fy,month);
+  /* First honour the authoritative execution state already written to the
+     planning row by the salary-execution engine.  This is important for
+     cross-FY rollover (Mar salary -> Apr posting) and also prevents the APY
+     display from disagreeing with Planning merely because the APY member is
+     Sweta/Rashi rather than the salary owner Vijay. */
+  const executedRows=plans.filter(r=>r.autoExecuted===true && Number(r.actualAmount||0)>0);
+  if(executedRows.length){
+    return executedRows.reduce((sum,r)=>sum+(Number(r.actualAmount)||0),0);
+  }
+
+  /* Normal rule: the salary receipt that funds the investment drives APY
+     execution.  The member name is the APY account owner, not the salary
+     trigger, so Sweta/Rashi APY must not depend on their own salary ledger. */
+  const linked=phase54SalaryReceivedForPosting(fy,month);
 
   return linked?Math.max(0,planned):0;
 } function phase564SetAPYRate(value){
@@ -6034,9 +6091,12 @@ function phase574SyncAPYFromSalary(fy){
       return;
     }
 
-    const linked=(String(member).trim().toUpperCase()==="SWETA")
-      ? phase574SwetaSalaryExecutedForPosting(row.fy,targetMonth)
-      : phase54SalaryReceivedForPosting(row.fy,targetMonth);
+    // APY is a salary-funded investment in this VMG workflow.  The APY
+    // member/account (e.g. Sweta) is the beneficiary/ledger owner; it does
+    // not change which salary receipt triggers execution.  Use the same
+    // authoritative salary execution trigger used by the other investment
+    // plans, including the Mar -> Apr FY rollover.
+    const linked=phase54SalaryReceivedForPosting(row.fy,targetMonth);
     const amount=Math.max(0,Number(row.planned)||0);
 
     /* Remove every auto salary-generated transaction for this APY plan.
@@ -7986,7 +8046,6 @@ function phase535ExecutedLedgerSum(kind,fy,month,account){
       if(!row) return false; // stale linked transaction
       if(String(row.type||"").trim().toUpperCase()!=="PPF") return false;
       if(!row.executed) return false;
-      if(row.autoExecuted) return false; // salary linkage is never PPF execution
       return true;
     }).filter(t=>{
       if(!account) return true;
@@ -8549,19 +8608,15 @@ function phase543ClearPPFAutoExecuted(row){
 }
 
 function phase543CleanupLegacyPPFAutoExecution(){
-  ensure54Arrays();
-  let changed=false;
-  (d.investmentPlans||[]).filter(r=>r&&String(r.type||"").toUpperCase()==="PPF"&&r.autoExecuted).forEach(r=>{
-    r.executed=false; r.autoExecuted=false; r.autoExecutionSalaryMonth=""; r.actualAmount="";
-    d.executionLedger=(d.executionLedger||[]).filter(z=>String(z.sourceId)!==String(r.id));
-    phase543ClearPPFAutoExecuted(r); phase54PostPPF(r); changed=true;
-  });
-  if(changed) saveDataNoToast();
+  // PPF planned contributions are salary-linked just like other planned
+  // investments. Do NOT clear auto-executed PPF rows during render/startup.
+  return;
 }
 function phase543SyncPPFAutoExecution(fy){
-  // PPF is deliberately manual-execution only. Salary receipt must never
-  // convert a planned PPF contribution into an executed investment.
-  phase543CleanupLegacyPPFAutoExecution();
+  // PPF execution is controlled by Salary Received. The next posting month
+  // is executed from its Planning row by phase523AutoExecuteMonth().
+  // This function intentionally does not undo that execution.
+  return;
 }
 
 let phase543PPFActiveMember="Vijay";
@@ -8591,7 +8646,9 @@ function phase543PPFNav(active){
 }
 
 function phase543PPFLedgerCard(fy,selectedMember){
-  ensurePPFLedger54(); phase543EnsurePPFSettings(); phase543SyncPPFAutoExecution(fy);
+  ensurePPFLedger54(); phase543EnsurePPFSettings();
+  phase523ReconcileAllSavedSalaryExecutions();
+  phase543SyncPPFAutoExecution(fy);
   const accounts=Object.keys(d.ppfLedger54||{});
   const selectedAccount=selectedMember?phase543PPFAccountForMember(selectedMember):null;
   const list=selectedAccount?[selectedAccount]:(accounts.length?accounts:["PPF - VIJAY"]);
@@ -10649,7 +10706,9 @@ function phase575ExpenseSummaryOnly(fy){
   const plans=(d.expensePlans||[]).filter(x=>
     x&&x.fy===fy&&!String(x.id||"").startsWith("ex-")
   );
-  const months=CASHFLOW_MONTHS.slice();
+  // Expense Ledger is displayed in the standard Indian financial-year order: Apr -> Mar.
+  // This is display/order only; expense amounts remain keyed by their actual month.
+  const months=LEDGER_FY_MONTHS.slice();
   const cats=(d.expenseCategories||[])
     .filter(x=>x&&x.active!==false)
     .map(x=>String(x.name||"").trim())
@@ -10679,13 +10738,16 @@ function phase575ExpenseSummaryOnly(fy){
     return {category,planned,actual,variance:Math.abs(actual-planned)};
   }).filter(x=>x.planned!==0||x.actual!==0);
 
+  // Category-wise Expense Ledger is based on Expense Planning, not execution.
+  // This ensures Apr and every other planned month is displayed even before
+  // salary-linked execution has occurred.
   const monthData=cats.map(category=>{
     const vals=months.map(month=>{
       const r=plans.filter(x=>
         (String(x.category||"General").trim()||"General")===category &&
         String(x.month||"")===String(month)
       );
-      return r.reduce((s,x)=>s+actualAmount(x),0);
+      return r.reduce((s,x)=>s+plannedAmount(x),0);
     });
     const total=vals.reduce((s,v)=>s+v,0);
     return {category,vals,total};
@@ -10739,12 +10801,7 @@ function phase575ExpenseSummaryOnly(fy){
   </div>
 
   <div class="card">
-    <h2>Expense Ledger — Category-wise Monthly</h2>
-    <div class="notice">
-      Simple control ledger: it is automatically built from <b>Expense Planning</b>.
-      It records only the actual expense amount by category and month. No
-      separate payment/member/date/execution entry is required here.
-    </div>
+    <h2>Expense Ledger — Category-wise Monthly (Based on Planning)</h2>
     <div style="overflow:auto">
       <table>
         <thead><tr>
@@ -10759,10 +10816,10 @@ function phase575ExpenseSummaryOnly(fy){
           <tr class="total-row">
             <td><b>Total</b></td>
             ${months.map(m=>{
-              const v=plans.filter(x=>String(x.month||"")===m).reduce((s,x)=>s+actualAmount(x),0);
+              const v=plans.filter(x=>String(x.month||"")===m).reduce((s,x)=>s+plannedAmount(x),0);
               return `<td><b>₹${fmt(v)}</b></td>`;
             }).join("")}
-            <td><b>₹${fmt(actualTotal)}</b></td>
+            <td><b>₹${fmt(plannedTotal)}</b></td>
           </tr>
         </tbody>
       </table>
@@ -13816,7 +13873,7 @@ function phase526PlanningSubtab(key){
     </div>
     <div class="card">
       <h2>Monthly Fund Balance — Vijay Salary</h2>
-      <div class="notice" style="display:block!important">Only investments funded by <b>Vijay / My Salary</b> are deducted here. Investments planned under Sweta or Rashi tabs are excluded. For <b>FY 26-27</b>, <b>Apr-26</b> is the known historical/rollover posting from the already-executed Mar-26 salary. The <b>Apr-26 Opening / Previous FY Closing</b> is a fixed historical/rollover opening because detailed FY25-26 salary data is unavailable. The grey colour marks Apr-26 as established; it does not invent an execution amount. All later monthly openings and the FY closing are formula-driven.</div>
+      
       <div style="overflow:auto"><table class="horizontalPlan planAligned plan-balance"><colgroup><col style="width:360px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:95px"><col style="width:90px"></colgroup><thead><tr><th>Balance</th>${months.map(m=>`<th class="plan-month" style="width:95px;min-width:95px;max-width:95px;text-align:center!important;padding-left:0;padding-right:0">${m}</th>`).join("")}<th>FY Closing</th></tr></thead>
       <tbody>
         <tr><td><b>Opening / Previous FY Closing</b></td>${months.map((m,i)=>{const historical=(String(fy)==="2026-27"&&m==="Apr"); const grey=phase526PlanMonthGrey(fy,m)?" vmg-input-grey":""; if(historical){ const ov=phase526PlanningOpeningValue(fy); return `<td class="historical-apr26" style="width:95px;min-width:95px;max-width:95px;text-align:right!important;background:#e5e7eb!important"><input type="number" step="1" data-apr-opening="1" class="planning-opening-editable" value="${ov}" onchange="phase526SetPlanningOpening('${esc(fy)}',this.value)" style="display:inline-block;width:90px;min-width:90px;max-width:90px;box-sizing:border-box;text-align:right!important;background:#e5e7eb!important;color:#111827!important;border:2px solid #9ca3af!important;border-radius:6px!important;box-shadow:none!important;pointer-events:auto!important;cursor:text!important;opacity:1!important;padding:8px 6px;line-height:1.2;outline:none;font:inherit"></td>`;} return `<td style="width:95px;min-width:95px;max-width:95px;text-align:right!important"><span class="fundBalanceCell${grey}" style="display:inline-block;width:90px;min-width:90px;max-width:90px;box-sizing:border-box;text-align:right!important"><b>₹${fmt(bal.cells[m].opening)}</b></span></td>`;}).join("")}<td></td></tr>
@@ -14111,7 +14168,7 @@ function phaseAllocEnsureQuarterly(){
   const key=phaseAllocQuarterKey(fy,q);
   if(!d.allocationQuarterlyAdvice[key]) d.allocationQuarterlyAdvice[key]={
     fy, quarter:q, reviewedOn:new Date().toISOString().slice(0,10),
-    marketScenario:"Quarterly review required", advisedTargets:{...VMG_ALLOC_ADVISED_TARGETS}, notes:"Update this quarter after reviewing the prevailing market scenario, rates, valuation and the remaining retirement horizon."
+    marketScenario:"Balanced / Neutral", advisedTargets:{...VMG_ALLOC_ADVISED_TARGETS}, notes:"Update this quarter after reviewing the prevailing market scenario, rates, valuation and the remaining retirement horizon."
   };
   return d.allocationQuarterlyAdvice[key];
 }
@@ -14334,30 +14391,107 @@ function phaseAllocActionSummary(rows){
    token or external service is used. Advice is deterministic and stored by
    FY + quarter.
 */
+function phaseAllocMarketScenarioStore(fy,q){
+  phaseAllocEnsureQuarterly();
+  const key=phaseAllocQuarterKey(fy,q);
+  const rec=d.allocationQuarterlyAdvice?.[key];
+  if(rec && !rec.marketScenario) rec.marketScenario="Balanced / Neutral";
+  return rec?.marketScenario||"Balanced / Neutral";
+}
+function phaseAllocSetMarketScenario(fy,q,value){
+  phaseAllocEnsureQuarterly();
+  const key=phaseAllocQuarterKey(fy,q);
+  const rec=d.allocationQuarterlyAdvice[key]||{fy,quarter:q,reviewedOn:new Date().toISOString().slice(0,10)};
+  rec.marketScenario=String(value||"Balanced / Neutral");
+  rec.reviewedOn=new Date().toISOString().slice(0,10);
+  d.allocationQuarterlyAdvice[key]=rec;
+  save(); render();
+}
 function phaseAllocLocalAdviceTargets(fy){
+  const q=phaseAllocQuarterForDate();
   const base=phaseAllocIsPostRetirement(fy)
     ? phaseAllocPostRetirementDefaults()
     : (phaseAllocFYStart(fy)===2026 ? {...VMG_ALLOC_ADVISED_TARGETS} : {...phaseAllocDefaultForFY(fy)});
   const targets={...base};
   const horizon=Math.max(0,phaseAllocRetirementFYStart()-phaseAllocFYStart(fy));
+  const age=Math.max(0,58-horizon);
   const g=phaseAllocGuidance(fy);
   const current=Object.fromEntries(g.rows.map(r=>[r.key,Number(r.current)||0]));
+  const fundTypes=phaseAllocFundTypeStore();
+  const scenario=phaseAllocMarketScenarioStore(fy,q);
 
-  if(!phaseAllocIsPostRetirement(fy) && horizon<=5){
-    const shift=Math.min(4,Math.max(0,6-horizon));
-    targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift);
-    targets['FD']=(targets['FD']||0)+Math.ceil(shift*0.75);
-    targets['PPF']=(targets['PPF']||0)+(shift-Math.ceil(shift*0.75));
+  /*
+     VMG recommendation engine: fund type + age + retirement horizon + current
+     portfolio + retirement-income need + selected quarterly market scenario.
+     Fund Type is now an input to advice, but never overwrites the user's
+     editable Target %. This remains a deterministic offline planning model.
+  */
+  const equityKeys=Object.keys(fundTypes).filter(k=>fundTypes[k]==='Equity Fund');
+  const hybridKeys=Object.keys(fundTypes).filter(k=>fundTypes[k]==='Hybrid Fund');
+  const debtKeys=Object.keys(fundTypes).filter(k=>fundTypes[k]==='Debt Fund');
+  const liquidKeys=Object.keys(fundTypes).filter(k=>fundTypes[k]==='Liquid Fund');
+  const equityShare=equityKeys.reduce((n,k)=>n+(current[k]||0),0);
+  const hybridShare=hybridKeys.reduce((n,k)=>n+(current[k]||0),0);
+
+  // Retirement proximity: gradually reduce risk as retirement gets closer.
+  if(!phaseAllocIsPostRetirement(fy)){
+    if(horizon<=5){
+      const shift=Math.min(6,Math.max(0,6-horizon));
+      targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift);
+      targets['FD']=(targets['FD']||0)+Math.ceil(shift*0.65);
+      targets['PPF']=(targets['PPF']||0)+(shift-Math.ceil(shift*0.65));
+    }
+    // Age factor: after 50, modestly cap equity-heavy advice unless market is favorable.
+    if(age>=50 && scenario!=='Equity favorable'){
+      const shift=Math.min(3,(age-49)*0.6);
+      targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift);
+      targets['FD']=(targets['FD']||0)+shift;
+    }
   }
 
+  // Fund-type factor: recommendation is expressed through the actual classified assets.
+  equityKeys.forEach(k=>{ targets[k]=Math.max(0,Number(targets[k]||0)); });
+  if(equityShare>40){
+    const shift=Math.min(3,equityShare-40);
+    equityKeys.forEach(k=>targets[k]=Math.max(0,(targets[k]||0)-shift/equityKeys.length));
+    if(targets['FD']!=null) targets['FD']=(targets['FD']||0)+shift;
+  }
+  if(hybridShare>20 && targets['FD']!=null){
+    const shift=Math.min(2,hybridShare-20); targets['FD']=(targets['FD']||0)+shift;
+    hybridKeys.forEach(k=>targets[k]=Math.max(0,(targets[k]||0)-shift/hybridKeys.length));
+  }
+  if(liquidKeys.length && horizon<=5 && targets['FD']!=null){
+    const shift=Math.min(2,5-horizon); liquidKeys.forEach(k=>targets[k]=(targets[k]||0)+shift/liquidKeys.length); targets['FD']=Math.max(0,(targets['FD']||0)-shift);
+  }
+
+  // Quarterly market scenario tilt. This affects the recommendation only.
+  if(scenario==='Equity favorable'){
+    const shift=2; targets['Mutual Fund']=(targets['Mutual Fund']||0)+shift; targets['FD']=Math.max(0,(targets['FD']||0)-shift);
+  }else if(scenario==='Equity cautious' || scenario==='High volatility'){
+    const shift=scenario==='High volatility'?3:2; targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift); targets['FD']=(targets['FD']||0)+shift;
+  }else if(scenario==='High interest / debt favorable'){
+    const shift=2; targets['FD']=(targets['FD']||0)+shift; targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-shift);
+  }
+
+  // Retirement income need: if a planning income/ROI is stored, increase liquidity
+  // when the projected retirement corpus would otherwise support less income.
+  const desiredMonthly=Number(localStorage.getItem('PFM_RETIRE_INCOME')||150000);
+  const roi=Number(localStorage.getItem('PFM_RETIRE_ROI')||10);
+  const projectedIncome=Number(localStorage.getItem('PFM_RETIRE_PROJECTED_INCOME')||0);
+  if(desiredMonthly>0 && projectedIncome>0 && projectedIncome<desiredMonthly){
+    const gap=Math.min(4,(desiredMonthly-projectedIncome)/desiredMonthly*4);
+    targets['FD']=(targets['FD']||0)+gap;
+    targets['Mutual Fund']=Math.max(0,(targets['Mutual Fund']||0)-gap);
+  }
+
+  // Current concentration: avoid recommending more to assets already materially overweight.
   const controllable=['PPF','FD','Mutual Fund','AltGraff','NCD','NPS','LIC'];
   const overweight=controllable.filter(k=>current[k]>Number(targets[k]||0)+8);
   if(overweight.length){
     let shift=0;
     overweight.forEach(k=>{
       const excess=Math.min(2,Math.max(0,current[k]-Number(targets[k]||0)-8));
-      targets[k]=Math.max(0,(targets[k]||0)-excess);
-      shift+=excess;
+      targets[k]=Math.max(0,(targets[k]||0)-excess); shift+=excess;
     });
     targets['FD']=(targets['FD']||0)+shift;
   }
@@ -14366,9 +14500,7 @@ function phaseAllocLocalAdviceTargets(fy){
   const keys=VMG_ALLOC_ASSETS.filter(a=>a.control!=='auto' && a.key!=='APY').map(a=>a.key);
   let sum=keys.reduce((n,k)=>n+Math.max(0,Number(targets[k])||0),0);
   if(sum<=0){ keys.forEach(k=>targets[k]=0); targets['FD']=100; }
-  else if(Math.abs(sum-100)>0.001){
-    const factor=100/sum; keys.forEach(k=>targets[k]=Math.max(0,(Number(targets[k])||0)*factor));
-  }
+  else if(Math.abs(sum-100)>0.001){ const factor=100/sum; keys.forEach(k=>targets[k]=Math.max(0,(Number(targets[k])||0)*factor)); }
   const rounded=keys.reduce((n,k)=>n+Number(Number(targets[k]).toFixed(2)),0);
   const delta=Number((100-rounded).toFixed(2));
   if(delta) targets[keys[keys.length-1]]=Number((Number(targets[keys[keys.length-1]])+delta).toFixed(2));
@@ -14409,7 +14541,7 @@ function phaseAllocQuarterlyReviewPanel(fy){
       <span><b>Current review:</b> ${esc(q)} • ${esc(new Date().toISOString().slice(0,10))}</span>
       <span><b>Status:</b> ${rec?.online?'Reviewed online':'Local / saved baseline'}</span>
     </div>
-    ${rec?.marketScenario?`<div style="margin-top:7px"><b>Review type:</b> ${esc(rec.marketScenario)}</div>`:''}
+    <div style="margin-top:7px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Market Scenario:</b><select onchange="phaseAllocSetMarketScenario('${esc(fy)}','${esc(q)}',this.value)" aria-label="VMG market scenario"><option ${phaseAllocMarketScenarioStore(fy,q)==='Balanced / Neutral'?'selected':''}>Balanced / Neutral</option><option ${phaseAllocMarketScenarioStore(fy,q)==='Equity favorable'?'selected':''}>Equity favorable</option><option ${phaseAllocMarketScenarioStore(fy,q)==='Equity cautious'?'selected':''}>Equity cautious</option><option ${phaseAllocMarketScenarioStore(fy,q)==='High volatility'?'selected':''}>High volatility</option><option ${phaseAllocMarketScenarioStore(fy,q)==='High interest / debt favorable'?'selected':''}>High interest / debt favorable</option></select></div>
     ${rec?.notes?`<div style="margin-top:4px"><b>Review note:</b> ${esc(rec.notes)}</div>`:''}
     ${history.length?`<div style="margin-top:7px"><b>Quarter history:</b> ${history.map(x=>esc(x.quarter)+' — '+esc(x.reviewedOn||'')).join(' | ')}</div>`:''}
     <div style="margin-top:9px;font-size:12px;color:#475569">No OpenAI API, Cloudflare Worker, access token or paid service is required for this adviser.</div>
@@ -14448,7 +14580,7 @@ function phase700AllocationGuidance(fy){
       <h2 style="margin:0">🎯 Allocation Guidance — ${esc(title)}</h2>
       <button id="vmgAdviseTargetBtn" class="btn primary" type="button" onclick="phaseAllocRunLocalAdvice()" style="font-size:15px;padding:10px 18px;white-space:nowrap">🎯 ADVISE TARGET %</button>
     </div>
-    <div class="notice">Fund Type is user-selectable as <b>Debt Fund / Equity Fund / Hybrid Fund / Liquid Fund</b>. <b>Advised Target %</b> is a local VMG planning recommendation based on active-principal allocation, retirement horizon and the VMG lifecycle baseline. <b>No external API or paid service is used.</b> The existing <b>Target %</b> remains fully editable (except fixed AUTO assets) and is the actual planning assumption used for Target Amount and Guidance. Current % is calculated from Active Principal only. <b>↓ means reduce new allocation, not sell existing holdings.</b> APY is fixed as AUTO; employer-controlled EPF / EPS and Superannuation are also AUTO. Advice is stored by FY + quarter.</div>
+    <div class="notice">Fund Type is user-selectable as <b>Debt Fund / Equity Fund / Hybrid Fund / Liquid Fund</b>. <b>Advised Target %</b> is a local VMG planning recommendation based on fund type, age/retirement horizon, active-principal allocation, retirement-income need where configured, and the selected quarterly market scenario. <b>No external API or paid service is used.</b> The existing <b>Target %</b> remains fully editable (except fixed AUTO assets) and is the actual planning assumption used for Target Amount and Guidance. Current % is calculated from Active Principal only. <b>↓ means reduce new allocation, not sell existing holdings.</b> APY is fixed as AUTO; employer-controlled EPF / EPS and Superannuation are also AUTO. Advice is stored by FY + quarter.</div>
     <div style="overflow:auto"><table class="vmg-alloc-table"><thead><tr><th>Asset</th><th>Type of Fund</th><th>Control</th><th>Active Principal ₹</th><th>Current %</th><th>Advised Target %</th><th>Target %<br><small>Editable</small></th><th>Target Amount ₹</th><th>Guidance</th></tr></thead><tbody>${rows}${totalRow}</tbody></table></div>
     ${phaseAllocQuarterlyReviewPanel(fy)}
   </div>`;
@@ -15599,12 +15731,13 @@ function toggleSalary(id,v){
   phase54PostEPFLedgerDetailed(fy,month);
   phase54PostSuper(fy,month);
   const contributionMonth=phase541NextContributionMonth(month);
+  const investmentFY=(String(month)==='Mar') ? fyLabel(phase54FYStart(fy)+1) : fy;
   if(v){
     // Income → Salary Received is the master execution trigger.
     // It must post the following month's planned investments AND expenses.
     phase523AutoExecuteMonth(fy,month);
   }else if(contributionMonth){
-    const target=phase54PostingContext(fy,contributionMonth);
+    const target=phase54PostingContext(investmentFY,contributionMonth);
     (d.investmentPlans||[]).filter(x=>x&&x.fy===target.fy&&String(x.month)===String(contributionMonth)&&x.autoExecuted&&(
       String(x.autoExecutionSalaryMonth||"")===String(month)||!x.autoExecutionSalaryMonth
     )).forEach(x=>{
@@ -20124,6 +20257,91 @@ document.addEventListener('wheel', function(e){
   }catch(e){
     console.error('VMG PATCH17 TRUE SUPER/APY ROLLOVER:',e);
   }
+})();
+</script>
+
+<script id="vmgSalaryExecutionStartupSync-v24">
+(function(){
+  // Reconcile already-saved Salary Received flags with the following month's
+  // Investment Planning rows. This is essential when a user reopens the HTML
+  // after marking salary executed in an earlier session/FY.
+  function sync(){
+    try{
+      if(!window.d || !Array.isArray(d.financialYears) || typeof salaryRows!=='function' || typeof phase523AutoExecuteMonth!=='function') return;
+      ensure54Arrays();
+      phase523ReconcileAllSavedSalaryExecutions();
+      let changed=false;
+      (d.financialYears||[]).forEach(fyObj=>{
+        const salaryFY=fyObj && (fyObj.label||fyObj.fy);
+        if(!salaryFY)return;
+        salaryRows(salaryFY).filter(r=>r&&r.p&&r.p.received).forEach(r=>{
+          const before=(d.investmentPlans||[]).filter(x=>
+            x&&String(x.fy)===String((String(r.month)==='Mar')?fyLabel(phase54FYStart(salaryFY)+1):salaryFY)&&
+            String(x.month)===String(phase541NextContributionMonth(r.month))&&
+            !String(x.id).startsWith('cf-')&&Number(x.planned||0)>0
+          ).map(x=>`${x.id}:${x.executed}:${x.actualAmount}`).join('|');
+          phase523AutoExecuteMonth(salaryFY,r.month);
+          const after=(d.investmentPlans||[]).filter(x=>
+            x&&String(x.fy)===String((String(r.month)==='Mar')?fyLabel(phase54FYStart(salaryFY)+1):salaryFY)&&
+            String(x.month)===String(phase541NextContributionMonth(r.month))&&
+            !String(x.id).startsWith('cf-')&&Number(x.planned||0)>0
+          ).map(x=>`${x.id}:${x.executed}:${x.actualAmount}`).join('|');
+          if(before!==after)changed=true;
+        });
+      });
+      if(changed){
+        saveDataNoToast();
+        if(typeof render==='function') render();
+      }
+    }catch(e){console.error('VMG salary execution startup sync',e);}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(sync,0),{once:true});
+  else setTimeout(sync,0);
+})();
+</script>
+
+<script id="vmg-final-apy-execution-fix-v2">
+/* FINAL APY EXECUTION FIX V2 */
+(function(){
+  try{
+    phase564APYExecuted=function(fy,member,month){
+      const mem=String(member||'').trim().toUpperCase();
+      const rows=(d.investmentPlans||[]).filter(r=>{
+        if(!r || String(r.fy)!==String(fy) || String(r.month)!==String(month) || String(r.type||'').trim().toLowerCase()!=='apy') return false;
+        const rm=String(r.member||'').trim().toUpperCase();
+        const ra=String(r.ledgerAccount||'').trim().toUpperCase();
+        return rm?rm===mem:(!ra || ra===phase564APYMemberKey(member).toUpperCase());
+      });
+      if(!rows.length) return 0;
+      const planned=rows.reduce((sum,r)=>sum+(Number(r.planned)||0),0);
+      const fyStart=Number(String(fy||'').match(/20\d{2}/)?.[0]||phase54FYStart(fy));
+      if(fyStart===2026 && String(month)==='Apr') return Math.max(0,planned);
+      const months=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+      const order=months.indexOf(String(month));
+      let salaryFY=String(fy), salaryMonth='';
+      if(String(month)==='Apr'){ salaryFY=fyLabel(fyStart-1); salaryMonth='Mar'; }
+      else if(order>0){ salaryMonth=months[order-1]; }
+      else return 0;
+      const mi=months.indexOf(salaryMonth);
+      const salaryRow=(d.salaryPlans||[]).find(r=>r && String(r.fy)===salaryFY && Number(r.monthIndex)===mi);
+      return salaryRow && salaryRow.received ? Math.max(0,planned) : 0;
+    };
+  }catch(e){ console.error('VMG FINAL APY execution fix V2:', e); }
+})();
+</script>
+<script id="vmg-final-apy-vijay-salary-trigger-fix">
+/* FINAL APY FIX — APY account member does not determine salary trigger.
+   APY is funded from Vijay / My Salary in this VMG workflow.
+   Therefore Sweta/Rashi APY execution follows the corresponding Vijay
+   salary-received flag, including Mar -> Apr FY rollover. */
+(function(){
+  try{
+    window.phase574SwetaSalaryExecutedForPosting=function(fy,postingMonth){
+      return typeof phase54SalaryReceivedForPosting==="function"
+        ? !!phase54SalaryReceivedForPosting(fy,postingMonth)
+        : false;
+    };
+  }catch(e){ console.error("VMG FINAL APY Vijay salary trigger fix:",e); }
 })();
 </script>
 </body></html>
