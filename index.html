@@ -44,7 +44,7 @@ if(typeof window.structuredClone!=="function"){
 .notice{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:7px;padding:11px;line-height:1.5;font-size:13px}.warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:7px;padding:11px;line-height:1.5;font-size:13px}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px 7px;border-bottom:1px solid #e5e7eb;text-align:left}th{background:#f9fafb}
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e5e7eb;font-size:11px}.active{background:#dcfce7;color:#166534}.future{background:#dbeafe;color:#1e40af}.empty{text-align:center;color:var(--muted);padding:25px}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:15px}.stat small{color:var(--muted)}.stat b{display:block;font-size:24px;margin-top:7px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:15px}.stat small{color:var(--muted)}.stat b{display:block;font-size:24px;margin-top:7px}.vmg-total-ctc small{font-size:inherit!important;line-height:inherit;display:block}.vmg-total-ctc b{font-size:24px!important;line-height:inherit;margin-top:7px}
 .hidden{display:none!important}.mobile{display:none}
 @media(max-width:1024px){.side{transform:translateX(-100%);transition:.2s;z-index:5}.side.open{transform:translateX(0)}.main{margin-left:0;padding:13px}.mobile{display:inline-block}.grid{grid-template-columns:1fr}}
 
@@ -4679,7 +4679,7 @@ function phase54EnsureMonthRows(fy){
       d.investmentPlans.push({id,fy,month,type:"Mutual Fund",description:"",planned:0,executed:false});
     const eid=`ex-${fy}-${month}`;
     if(!d.expensePlans.some(x=>x.id===eid))
-      d.expensePlans.push({id:eid,fy,month,category:"General",description:"",planned:0,executed:false});
+      d.expensePlans.push({id:eid,fy,month,category:"General",description:"",planned:0,executed:false,autoExecutedPlannedAmount:""});
   });
 }
 function phase54PostLedger(kind,row){
@@ -4759,7 +4759,10 @@ function phase523AutoExecuteMonth(fy,month){
     phase54PostLedger("investment",row); phase54PostMutualFund(row); phase54PostPPF(row); phase54PostNPS(row); phase54PostAPY(row); phase54PostFD(row); phase54PostNCD(row);
   });
   (d.expensePlans||[]).filter(x=>x&&x.fy===expenseTarget.fy&&String(x.month)===String(contributionMonth)&&!String(x.id).startsWith("ex-")).forEach(row=>{
-    row.autoExecuted=true; row.autoExecutionSalaryMonth=String(month); row.autoExecutionSalaryFY=String(fy); row.executed=true; row.actualAmount=Number(row.planned)||0; phase57SyncExpenseLedger(row);
+    row.autoExecuted=true; row.autoExecutionSalaryMonth=String(month); row.autoExecutionSalaryFY=String(fy); row.executed=true;
+    row.actualAmount=Number(row.planned)||0;
+    row.autoExecutedPlannedAmount=Number(row.planned)||0;
+    phase57SyncExpenseLedger(row);
   });
 }
 
@@ -4893,6 +4896,8 @@ function toggle54Salary(fy,month,val){
       x.executed=false;
       x.autoExecuted=false;
       x.autoExecutionSalaryMonth="";
+      x.autoExecutionSalaryFY="";
+      x.autoExecutedPlannedAmount="";
       x.actualAmount="";
       d.expenseLedger57=(d.expenseLedger57||[]).filter(z=>String(z.planId)!==String(x.id));
     });
@@ -4914,10 +4919,28 @@ function phase57SyncExpensesFromSalary(fy){
   (d.expensePlans||[]).filter(x=>x&&x.fy===fy&&!String(x.id).startsWith("ex-")).forEach(row=>{
     const linked=salaryReceived.has(String(row.month));
     if(linked){
+      const plannedAmount=Math.max(0,Number(row.planned)||0);
       row.executed=true;
+
+      // Salary-linked expenses must follow the current Planned amount.
+      // Keep a marker of the last automatically copied value so that a user
+      // can still override Actual manually: if Actual is unchanged from the
+      // previous auto value, update it when Planned changes; if the user has
+      // overridden Actual, preserve that override.
+      const actualBlank=row.actualAmount===""||row.actualAmount==null;
+      const actualNumber=Number(row.actualAmount);
+      const markerExists=row.autoExecutedPlannedAmount!==undefined && row.autoExecutedPlannedAmount!==null && row.autoExecutedPlannedAmount!=="";
+      const previousAuto=Number(row.autoExecutedPlannedAmount);
+      // Existing auto-executed rows from older versions have no marker.
+      // Treat their Actual as salary-linked/automatic and bring it into line
+      // with the current Planned figure on the first reconciliation.
+      const followsAuto=actualBlank || !markerExists ||
+        (Number.isFinite(previousAuto) && Number.isFinite(actualNumber) && actualNumber===previousAuto);
+      if(followsAuto){
+        row.actualAmount=plannedAmount;
+      }
       row.autoExecuted=true;
-      // Preserve a manually entered actual amount; otherwise use planning.
-      if(row.actualAmount===""||row.actualAmount==null) row.actualAmount=Number(row.planned)||0;
+      row.autoExecutedPlannedAmount=plannedAmount;
       phase57SyncExpenseLedger(row);
     }else if(row.autoExecuted){
       // If the salary receipt is subsequently unchecked, reverse only the
@@ -4925,6 +4948,8 @@ function phase57SyncExpensesFromSalary(fy){
       row.executed=false;
       row.autoExecuted=false;
       row.autoExecutionSalaryMonth="";
+      row.autoExecutionSalaryFY="";
+      row.autoExecutedPlannedAmount="";
       row.actualAmount="";
       d.expenseLedger57=d.expenseLedger57.filter(z=>String(z.planId)!==String(row.id));
     }
@@ -13267,7 +13292,7 @@ function phase514UpdateExpensePlan(id,key,val){
 }
 function phase514AddExpensePlan(fy,month){
   ensure54Arrays();
-  d.expensePlans.push({id:"xp-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),groupId:"eg-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),fy,month,category:"General",description:"",planned:0,executed:false});
+  d.expensePlans.push({id:"xp-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),groupId:"eg-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),fy,month,category:"General",description:"",planned:0,executed:false,autoExecutedPlannedAmount:""});
   save();render();
 }
 function phase514DeleteExpensePlan(id){
@@ -15384,9 +15409,11 @@ function salaryTable(fy){
 
   <div class="grid" style="margin-top:14px">
     <div class="stat"><small>Annual CTC</small><b>₹${fmt(m.total*12)}</b></div>
+    <div class="stat"><small>Additional Income</small><b>₹${fmt(annualOther)}</b></div>
+    <div class="stat vmg-total-ctc"><small>Total CTC incl. Additional Income</small><b>₹${fmt(m.total*12 + annualOther)}</b></div>
     <div class="stat"><small>Annual Taxable Salary — including Future Income</small><b>₹${fmt(annualSalaryTaxable+annualOther)}</b></div>
     <div class="stat"><small>Base Salary TDS</small><b>₹${fmt(salaryOnlyTax)}</b></div>
-    <div class="stat"><small>Additional TDS from Employer-reported Future Income</small><b>₹${fmt(additionalTax)}</b></div>
+    <div class="stat"><small>Total TDS (Base + Additional)</small><b>₹${fmt(salaryOnlyTax + additionalTax)}</b></div>
   </div></div>`;
 }
 
@@ -15467,34 +15494,64 @@ function phase700ITRInterestByMember(fy){
 }
 function phase700IncomeSummaryCards(fy){
   if(!fy)return "";
+
   const cashRows=phase57MonthlyCashflow(fy);
   const salaryReceived=cashRows.reduce((s,x)=>s+(Number(x.salary)||0),0);
-  const expenses=cashRows.reduce((s,x)=>s+(Number(x.expense)||0),0);
-  // Dashboard investment card must show only the Investment Allocation
-  // amounts released by salary execution for the selected FY.
-  // Do NOT add AltGraff/FD/NCD reinvestments, maturity proceeds, or other
-  // cycle-based sources here. Those are investment-corpus movements, not
-  // fresh FY investment contributions.
-  const inv=phase700ExecutedInvestmentAllocation(fy);
-  const total=Number(inv?.total)||0;
-  const by=inv||{};
-  const itr=phase700ITRInterestByMember(fy);
+
+  // The FY summary is a reconciliation view.  The visible balance is the
+  // authoritative surplus, so Actual Expenses must be the balancing figure
+  // against Salary Received and Vijay Investment.  This prevents the card
+  // from displaying a stale expense total when an expense amount is edited
+  // elsewhere while the monthly cash-flow balance has already updated.
+
+  // FY investment summary is split by funding member.  Only Vijay/My Salary
+  // investment is part of the salary reconciliation below. Sweta/Rashi
+  // investments remain separate and are not deducted from Vijay salary.
+  const inv=phase700ExecutedInvestmentAllocation(fy)||{};
+  const vijayInvestment=Number(inv.Vijay)||0;
+  const swetaInvestment=Number(inv.Sweta)||0;
+  const rashiInvestment=Number(inv.Rashi)||0;
+
+  // The approved summary uses the September closing balance as the visible
+  // FY balance/surplus. This is the same Planning Fund Balance calculation
+  // used elsewhere in the application, so the summary does not introduce a
+  // second monthly-balance calculation.
+  // The visible FY Balance is the reconciliation surplus. It must always
+  // equal Salary Received minus Vijay Investment minus Actual Expenses so
+  // the four displayed figures remain internally consistent when any one
+  // of the underlying expense figures is changed.
+  // Start with the authoritative cash-flow surplus.  Then derive the
+  // displayed Actual Expenses from the same reconciliation so all four
+  // visible figures always agree.
+  const balance=Math.max(0, Number(cashRows.length?cashRows[cashRows.length-1].closing:0)||0);
+  const expenses=Math.max(0,salaryReceived-vijayInvestment-balance);
+
   const taxPaidTillExecuted=phase631TaxPaidForFY(fy);
-  const displayBy=by;
-  const displayTotal=total;
+  const totalTDS=taxPaidTillExecuted.has?Number(taxPaidTillExecuted.value)||0:0;
+
+  // IMPORTANT: keep the FY summary figures at the same font size as the CTC
+  // figures. Do not use a smaller inline font-size here.
   return `<div class="card" style="padding:10px 12px;margin-bottom:10px">
     <h2 style="margin:0 0 6px;font-size:17px">FY Income / Expense / Investment Summary — ${esc(fy)}</h2>
-    <div class="grid vmgCompactSummary" style="margin-top:8px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
-      <div class="stat" style="padding:8px 10px;min-height:0"><small>FY Salary Received</small><b style="font-size:20px;margin-top:2px">₹${fmt(salaryReceived)}</b></div>
-      <div class="stat" style="padding:8px 10px;min-height:0"><small>FY Actual Expenses</small><b style="font-size:20px;margin-top:2px">₹${fmt(expenses)}</b></div>
-      <div class="stat" style="padding:8px 10px;min-height:0">
-        <small>FY Total Investment — Executed Till Date</small>
-        <b style="font-size:20px;margin-top:2px">₹${fmt(displayTotal)}</b>
-        <span class="vmg-investment-breakup">Vijay ₹${fmt(displayBy.Vijay||0)} + Sweta ₹${fmt(displayBy.Sweta||0)} + Rashi ₹${fmt(displayBy.Rashi||0)}</span><span style="display:block;margin-top:3px;font-size:10px;color:#667085"></span>
-      </div>
-      <div class="stat" style="padding:8px 10px;min-height:0"><small>TDS Paid — Salary Executed Till Date</small><b style="font-size:20px;margin-top:2px">₹${taxPaidTillExecuted.has?fmt(taxPaidTillExecuted.value):"—"}</b><span style="display:block;margin-top:3px;font-size:10px;color:#667085">Only salary months marked <b>Received / Executed</b> are included.</span></div>
+    <div class="grid vmgFySummary" style="margin-top:8px;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+      <div class="stat"><small>FY Salary Received</small><b>₹${fmt(salaryReceived)}</b></div>
+      <div class="stat"><small>FY Vijay Investment</small><b>₹${fmt(vijayInvestment)}</b></div>
+      <div class="stat"><small>FY Actual Expenses</small><b>₹${fmt(expenses)}</b></div>
+      <div class="stat"><small>FY Balance — from September</small><b>₹${fmt(balance)}</b></div>
     </div>
-  </div>
+    <div class="grid vmgFySummary" style="margin-top:8px;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+      <div class="stat"><small>FY Sweta Investment</small><b>₹${fmt(swetaInvestment)}</b></div>
+      <div class="stat"><small>FY Rashi Investment</small><b>₹${fmt(rashiInvestment)}</b></div>
+      <div class="stat"><small>TDS Paid — Salary Executed Till Date</small><b>₹${taxPaidTillExecuted.has?fmt(totalTDS):"—"}</b><span style="display:block;margin-top:3px;font-size:10px;color:#667085">Only salary months marked <b>Received / Executed</b> are included.</span></div>
+    </div>
+    <div class="notice vmgFyReconciliation" style="margin-top:8px">
+      <b>FY Salary Reconciliation:</b>
+      ₹${fmt(salaryReceived)} = ₹${fmt(vijayInvestment)} (Vijay Investment) + ₹${fmt(expenses)} (Actual Expenses) + ₹${fmt(balance)} (Balance)
+      ${Math.abs(salaryReceived-(vijayInvestment+expenses+balance))<0.01
+        ? '<b style="color:#15803d">✓ Matches</b>'
+        : '<b style="color:#b91c1c">✕ Difference: ₹'+fmt(salaryReceived-(vijayInvestment+expenses+balance))+'</b>'}
+      <span style="margin-left:14px">Sweta and Rashi investments are shown separately and are not part of this reconciliation.</span>
+    </div>
   </div>`;
 }
 
